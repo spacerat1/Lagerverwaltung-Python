@@ -2,7 +2,7 @@ import sqlite3
 import tkinter as tk
 import tkinter.ttk as ttk
 import functions as fc
-import os
+
 
 class App:
     def __init__(self, connection:sqlite3.Connection, cursor:sqlite3.Cursor, user:str, path_to_db:str):
