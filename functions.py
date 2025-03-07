@@ -20,22 +20,25 @@ STANDARD = 'standard'
 
 
 def open_db():
-    if not os.path.exists(f"{os.getcwd()}/settings.txt"):
-        with open('settings.txt', 'w'):
+    settings = f"{os.environ['USERPROFILE']}\\Documents\\Lagerverwaltung_settings.txt"
+    if not os.path.exists(settings):
+        with open(settings, 'w'):
             pass
-    settings = f"{os.getcwd()}/settings.txt"
     with open(settings, 'r') as file:
         path_to_db = file.read()
     if not os.path.exists(path_to_db):
         ctypes.windll.user32.MessageBoxW(0,"Die Datenbank 'Lagerverwaltung_Datanbank.db' konnte nicht gefunden werden.\nBitte im nächsten Fenster die Datenbank auswählen", "Pfad zur Datenbank suchen...", 64)
-        path_to_db = change_db_path(settings)
+        path_to_db = change_db_path()
     return path_to_db
 
-def change_db_path(settings, app:application.App = None):
-    if not os.path.exists(settings):
-        with open('settings.txt', 'w'):
-            pass
-    path_to_db = filedialog.askopenfile(initialfile = 'Lagerverwaltung_Datenbank.db', defaultextension = '.db', filetypes = [('Datenbank', '*.db'), ('All files', '*.*') ])
+def change_db_path(app:application.App = None):
+    # if not os.path.exists(settings):
+    #     with open(settings, 'w'):
+    #         pass
+    settings = f"{os.environ['USERPROFILE']}\\Documents\\Lagerverwaltung_settings.txt"
+    path_to_db = filedialog.askopenfile(initialfile = 'Lagerverwaltung_Datenbank.db', 
+                                        defaultextension = '.db', 
+                                        filetypes = [('Datenbank', '*.db'), ('All files', '*.*') ])
     if not path_to_db:
         return
     with open(settings, 'w') as file:
@@ -48,6 +51,7 @@ def change_db_path(settings, app:application.App = None):
         app.connection = sqlite3.connect(path_to_db)
         app.connection.row_factory = sqlite3.Row
         app.cursor = app.connection.cursor()
+        app.window.call(app.disabled_button['command'])
     return path_to_db
 
 

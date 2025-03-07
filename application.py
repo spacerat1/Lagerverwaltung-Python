@@ -105,8 +105,8 @@ class App:
         self.style.configure('Frame_filter.TFrame', borderwidth = 2, bordercolor = 'grey', background = 'black', relief = 'groove')
         self.style.configure('Comline.TCombobox', background = 'black', foreground = 'forest green', font = 'Verdana 10')
         self.style.configure('Red.TCombobox', background = 'black', foreground = 'orange red', font = 'Verdana 10')
-        print(self.style.layout('Frame_grey2.TFrame'))
-        print(self.style.element_options('Frame.border'))
+        #print(self.style.layout('Frame_grey2.TFrame'))
+        #print(self.style.element_options('Frame.border'))
 
         # Überschrift Frame und Label erstellen
         self.frame_top = ttk.Frame(self.window, style = 'Frame_grey2.TFrame')
@@ -122,7 +122,7 @@ class App:
         self.button_change_db = ttk.Button(self.frame_top, 
                                            style = 'Comline.TButton',
                                            text = 'Pfad ändern',
-                                           command = lambda : fc.change_db_path(f"{os.getcwd()}/settings.txt", app = self))
+                                           command = lambda : fc.change_db_path(self))
         
         self.button_change_db.pack(side = tk.RIGHT, padx = 50, pady = 5)
         self.label_top.pack(side = tk.LEFT,padx = 100, pady = 10, fill = 'x', expand = True)
