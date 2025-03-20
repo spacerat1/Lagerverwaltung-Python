@@ -14,7 +14,8 @@ Bezeichnung TEXT,
 Einheit TEXT,
 Grenzwert INTEGER,
 Auffüllen INTEGER,
-bestellt BOOLEAN DEFAULT 0 NOT NULL CHECK (bestellt IN (0, 1))
+bestellt BOOLEAN DEFAULT 0 NOT NULL CHECK (bestellt IN (0, 1)),
+Datum DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS Wareneingang(

@@ -17,6 +17,6 @@ cursor = connection.cursor()
 app = App(connection, cursor, user, path_to_db)
 app.window.state('zoomed')
 app.window.mainloop()
-#fc.add_standardmaterial(connection, cursor, (40748416,'nVent Kabelöse Stahl, 100 x 100','ST', 5, 20, 0))
+#fc.add_standardmaterial(connection, cursor,(47203868, 'Modulträger ETSI 6x Modul 16x GfK 1:2sym', 'ST', 5, 20, 1))
 
 

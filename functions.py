@@ -6,12 +6,11 @@ import tkinter as tk
 import tkinter.ttk as ttk
 import application
 import re
+import datetime
 import win32com.client
 import openpyxl as xl
 from tkinter import filedialog
 from collections import defaultdict
-
-
 
 
 ADMIN = 'admin'
@@ -19,7 +18,7 @@ EXPERT = 'expert'
 STANDARD = 'standard'
 
 
-def open_db():
+def open_db() -> str:
     settings = f"{os.environ['USERPROFILE']}\\Documents\\Lagerverwaltung_settings.txt"
     if not os.path.exists(settings):
         with open(settings, 'w'):
@@ -27,14 +26,15 @@ def open_db():
     with open(settings, 'r') as file:
         path_to_db = file.read()
     if not os.path.exists(path_to_db):
-        ctypes.windll.user32.MessageBoxW(0,"Die Datenbank 'Lagerverwaltung_Datanbank.db' konnte nicht gefunden werden.\nBitte im nächsten Fenster die Datenbank auswählen", "Pfad zur Datenbank suchen...", 64)
+        ctypes.windll.user32.MessageBoxW(0,
+                                         "Die Datenbank 'Lagerverwaltung_Datanbank.db' konnte nicht gefunden werden.\nBitte im nächsten Fenster die Datenbank auswählen", 
+                                         "Pfad zur Datenbank suchen...", 
+                                         64)
         path_to_db = change_db_path()
     return path_to_db
 
-def change_db_path(app:application.App = None):
-    # if not os.path.exists(settings):
-    #     with open(settings, 'w'):
-    #         pass
+
+def change_db_path(app:application.App = None) -> str:
     settings = f"{os.environ['USERPROFILE']}\\Documents\\Lagerverwaltung_settings.txt"
     path_to_db = filedialog.askopenfile(initialfile = 'Lagerverwaltung_Datenbank.db', 
                                         defaultextension = '.db', 
@@ -55,8 +55,7 @@ def change_db_path(app:application.App = None):
     return path_to_db
 
 
-
-def set_widget_status(enabled, disabled):
+def set_widget_status(enabled: list[ttk.Widget], disabled:list[ttk.Widget]) -> None:
     for entry in enabled:
         if entry:
             entry.config(state = 'enabled')
@@ -67,8 +66,7 @@ def set_widget_status(enabled, disabled):
             entry.config(state = 'disabled')
     
 
-
-def show_critical_material(app:application.App):
+def show_critical_material(app:application.App) -> None:
     app.disabled_button.config(state = 'enabled')
     app.disabled_button = app.button_krit_mat
     app.button_krit_mat.config(state = 'disabled')
@@ -94,6 +92,7 @@ def show_critical_material(app:application.App):
     auffuellen_dict = defaultdict(int)
     namen_dict = defaultdict(str)
     bestellt_dict = defaultdict(int)
+    date_dict = defaultdict(str)
     ingoing_query = "SELECT * FROM Wareneingang"
     outgoing_query = "SELECT * FROM Warenausgang"
     threshhold_query = "SELECT * FROM Standardmaterial UNION SELECT * FROM Kleinstmaterial"
@@ -132,19 +131,19 @@ def show_critical_material(app:application.App):
         auffuellen_dict[row['MatNr']] = row['Auffüllen']
         namen_dict[row['MatNr']] = row['Bezeichnung']
         bestellt_dict[row['MatNr']] = 'nein' if row['bestellt'] == 0 else 'ja'
+        date_dict[row['MatNr']] = row['Datum'] if row['bestellt'] else ''
 
     kleinstmaterial_output= []
     standardmaterial_output = []
     for matnr, booked in sorted(outgoing_dict.items()):
         if ingoing_dict[matnr] - booked <= threshhold_dict[matnr]:
-            text_line = f"  {str(matnr).ljust(10)}{namen_dict[matnr].ljust(50)}{str(ingoing_dict[matnr]-booked).center(7)}{str(auffuellen_dict[matnr]).center(16)}{bestellt_dict[matnr].center(15)}"
+            text_line = f"  {str(matnr).ljust(10)}{namen_dict[matnr].ljust(50)}{str(ingoing_dict[matnr]-booked).center(7)}{str(auffuellen_dict[matnr]).center(18)}{bestellt_dict[matnr].center(10)}{str(date_dict[matnr]).center(19)}"
             if matnr in standardmaterial:
                 standardmaterial_output.append(text_line)
             elif matnr in kleinstmaterial:
                 kleinstmaterial_output.append(text_line)
     
-    
-    headline = (f"  {'MatNr.'.ljust(10)}{'Bezeichnung'.ljust(50)}{'Bestand'.ljust(9)}{'empfohlene Menge'.ljust(18)}schon bestellt?\n")
+    headline = (f"  {'MatNr.'.ljust(10)}{'Bezeichnung'.ljust(50)}{'Bestand'.ljust(9)}{'empfohlene Menge'.ljust(18)}{'bestellt?'.ljust(11)}{' '.ljust(2)}Datum\n")
     output_string_standard = '\n'.join(standardmaterial_output)
     output_string_kleinst = '\n'.join(kleinstmaterial_output)
     output_string = ("\n Das unten aufgeführte Material wird langsam knapp. Bitte nachbestellen.\n Um bestelltes Material als 'bestellt' zu markieren, bitte die entsprechenden Materialnummern mit der Maus markieren und dann den Knopf drücken.\n\n  Kritische Lagerbestände\n\n  Standardmaterial\n")
@@ -160,10 +159,8 @@ def show_critical_material(app:application.App):
     output_box.delete(1.0, 'end')
     output_box.insert(1.0, output_string)
     
-    #print(app.output_box.cget('font'))
 
-
-def toggle_ordered_status(app:application.App):
+def toggle_ordered_status(app:application.App) -> None:
     connection:sqlite3.Connection = app.connection
     cursor:sqlite3.Cursor = app.cursor
     try:
@@ -173,25 +170,43 @@ def toggle_ordered_status(app:application.App):
     mat_numbers = re.findall(r'\d{8}', selected_text)
     if not mat_numbers:
         return
+    
     for mat_number in mat_numbers:
+        
         cursor.execute(f'''SELECT bestellt FROM Standardmaterial WHERE MatNr = {mat_number} 
                     UNION SELECT bestellt FROM Kleinstmaterial WHERE MatNr = {mat_number}''')
         status = cursor.fetchone()[0]
         status = not status
 
-        cursor.execute(f''' UPDATE Standardmaterial
-                            SET bestellt = {status}
-                            WHERE MatNr = {mat_number}
-                    ''')
-        cursor.execute(f''' UPDATE Kleinstmaterial
-                            SET bestellt = {status}
-                            WHERE MatNr = {mat_number}
-                    ''')   
+        if not status:
+            cursor.execute(f''' UPDATE Standardmaterial
+                                SET bestellt = {status}
+                                WHERE MatNr = {mat_number}
+                        ''')
+            cursor.execute(f''' UPDATE Kleinstmaterial
+                                SET bestellt = {status}
+                                WHERE MatNr = {mat_number}
+                        ''')
+        else:
+            datum = datetime.datetime.strftime(datetime.datetime.now(), r'%Y-%m-%d')
+            #datum = datetime.datetime.now()
+            cursor.execute(''' UPDATE Standardmaterial
+                                SET bestellt = ?,
+                                    Datum = ?
+                                WHERE MatNr = ? 
+                           ''', (status, datum, mat_number))
+            cursor.execute(''' UPDATE Kleinstmaterial
+                                SET bestellt = ?,
+                                    Datum = ?
+                                WHERE MatNr = ?
+                            ''',(status, datum, mat_number))
+
+            
     connection.commit()
     show_critical_material(app)    
 
 
-def show_stock(app: application.App):
+def show_stock(app: application.App) -> None:
     app.disabled_button.config(state = 'enabled')
     app.disabled_button = app.button_bestand
     app.button_bestand.config(state = 'disabled')
@@ -204,32 +219,32 @@ def show_stock(app: application.App):
     app.sm_entry.unbind('<KeyRelease>')
     app.posnr_entry.unbind('<Return>')
     app.posnr_entry.unbind('<KeyRelease>')
+    app.combobox_loeschen.unbind('<<ComboboxSelected>>')
     app.matnr_entry.bind('<Return>', lambda _ : show_stock(app))
     app.matnr_entry.bind('<KeyRelease>', lambda _: show_stock(app))
-    app.combobox_loeschen.unbind('<<ComboboxSelected>>')
+    
+    app.matnr_entry.focus()
 
     cursor = app.cursor
     matnr_entry = app.matnr_entry
     output_box = app.output_box
     matnr = matnr_entry.get()
-    ingoing_query = "SELECT * FROM Wareneingang WHERE MatNr LIKE ?"
-    outgoing_query = "SELECT * FROM Warenausgang WHERE MatNr LIKE ?"
-    material_query = "SELECT * FROM Standardmaterial UNION SELECT * FROM Kleinstmaterial"
+    
     standardmaterial_query = "SELECT * FROM Standardmaterial"
-    cursor.execute(ingoing_query, (f'%{matnr}%',))
-    ingoing = cursor.fetchall()
-    cursor.execute(outgoing_query, (f'%{matnr}%',))
-    outgoing = cursor.fetchall()
-    cursor.execute(material_query)
-    material = cursor.fetchall()
     cursor.execute(standardmaterial_query)
     standardmaterial = cursor.fetchall()
     standardmaterial_list = [row['MatNr'] for row in standardmaterial]
     
+    ingoing_query = "SELECT * FROM Wareneingang WHERE MatNr LIKE ?"
+    cursor.execute(ingoing_query, (f'%{matnr}%',))
+    ingoing = cursor.fetchall()
     ingoing_dict = defaultdict(int)
     for row in ingoing:
         ingoing_dict[row['MatNr']] += row['Menge']
     
+    outgoing_query = "SELECT * FROM Warenausgang WHERE MatNr LIKE ?"
+    cursor.execute(outgoing_query, (f'%{matnr}%',))
+    outgoing = cursor.fetchall()
     outgoing_dict = defaultdict(int)
     for row in outgoing:
         if row['Warenausgangsmenge'] != 0:
@@ -241,7 +256,10 @@ def show_stock(app: application.App):
             outgoing_dict[row['MatNr']] -= menge
         elif row['PosTyp'] == 9:
             outgoing_dict[row['MatNr']] += menge
-
+    
+    material_query = "SELECT * FROM Standardmaterial UNION SELECT * FROM Kleinstmaterial"
+    cursor.execute(material_query)
+    material = cursor.fetchall()
     material_dict = defaultdict(list)
     for row in material:
         if row['MatNr'] in standardmaterial_list:
@@ -270,9 +288,7 @@ def show_stock(app: application.App):
     output_box.insert(1.0, output_string)
     
      
-
-
-def show_ingoing_material(app:application.App):
+def show_ingoing_material(app:application.App) -> None:
     app.disabled_button.config(state = 'enabled')
     app.disabled_button = app.button_wareneingang
     app.button_wareneingang.config(state = 'disabled')
@@ -280,7 +296,7 @@ def show_ingoing_material(app:application.App):
     enabled = [app.matnr_entry]
     disabled = [app.sm_entry, app.posnr_entry, app.bestellt_label, app.bestellt_button, app.delete_button, app.print_button, app.combobox_loeschen]
     set_widget_status(enabled, disabled)
-
+    app.matnr_entry.focus()
     app.sm_entry.unbind('<Return>')
     app.sm_entry.unbind('<KeyRelease>')
     app.posnr_entry.unbind('<Return>')
@@ -309,7 +325,7 @@ def show_ingoing_material(app:application.App):
     app.output_box.insert(1.0, output)
 
 
-def show_outgoing_material(app:application.App):
+def show_outgoing_material(app:application.App) -> None:
     app.disabled_button.config(state = 'enabled')
     app.disabled_button = app.button_warenausgang
     app.button_warenausgang.config(state = 'disabled')
@@ -317,7 +333,8 @@ def show_outgoing_material(app:application.App):
     enabled = [app.sm_entry, app.matnr_entry]
     disabled = [app.posnr_entry, app.bestellt_label, app.bestellt_button, app.delete_button, app.print_button, app.combobox_loeschen]
     set_widget_status(enabled, disabled)
-
+    if str(app.matnr_entry.focus_get()) != '.!frame3.!entry3': # .!frame3.!entry3 ist der Name vom SM_ENTRY Widget
+        app.matnr_entry.focus()
     app.sm_entry.bind('<Return>', lambda _ : show_outgoing_material(app))
     app.sm_entry.bind('<KeyRelease>', lambda _ : show_outgoing_material(app))
     app.posnr_entry.unbind('<Return>')
@@ -329,17 +346,16 @@ def show_outgoing_material(app:application.App):
     cursor:sqlite3.Cursor = app.cursor
     matnr = app.matnr_entry.get()
     smnr = app.sm_entry.get()
-    cursor.execute("SELECT * FROM Warenausgang WHERE MatNr LIKE ? AND SM_Nummer LIKE ?", (f'%{matnr}%', f'%{smnr}%',))
-    #cursor.execute(f"SELECT * FROM Warenausgang {selector} {matnr_string} {concatenator} {sm_string}")
+    cursor.execute("SELECT * FROM Warenausgang WHERE MatNr LIKE ? AND SM_Nummer LIKE ? AND PosTyp = 9", (f'%{matnr}%', f'%{smnr}%',))
     selection = cursor.fetchall()
     
-    headline = (f"{'SM Nummer'.ljust(10)}\t{'Pos'.ljust(3)}\t{'Typ'.ljust(3)}  {'MatNr'.ljust(8)}\
+    headline = (f"{'Nr.'.rjust(5)}\t{'SM Nummer'.ljust(10)}\t{'Pos'.ljust(3)}\t{'Typ'.ljust(3)}  {'MatNr'.ljust(8)}\
 \t\t{'Bezeichnung'.ljust(50)}\t{'SD Beleg'.ljust(10)}\t{'Bedarfsmenge'.ljust(12)}\
 \t\t{'Warenausgangsmenge'.ljust(18)}\t{'Umbuchungsmenge'.ljust(15)}\t{'Lieferschein'.ljust(12)}\t{'Materialbeleg'.ljust(13)}\n")
     output = headline if selection else 'Keine Daten gefunden. Bitte Filter überprüfen.'
-    for row in selection:
+    for number, row in enumerate(selection, start = 1):
         #print(f"{row['SM_Nummer']}\t{row['Warenausgangsmenge']}")
-        text = (f"{row['SM_Nummer'].ljust(10)}\t{row['Position'].ljust(3)}\t{str(row['PosTyp']).ljust(3)}  {str(row['MatNr']).ljust(8)}\
+        text = (f"{str(number).rjust(5)}\t{row['SM_Nummer'].ljust(10)}\t{row['Position'].ljust(3)}\t{str(row['PosTyp']).ljust(3)}  {str(row['MatNr']).ljust(8)}\
 \t\t{row['Bezeichnung'].ljust(50)}\t{row['SD_Beleg'][:10].ljust(10)}\t{str(row['Bedarfsmenge']).center(12)}\
 \t\t{str(row['Warenausgangsmenge']).center(18)}\t{str(row['Umbuchungsmenge']).center(15)}\t{row['Lieferschein'][:10].ljust(12)}\t{row['Materialbeleg'][:10].ljust(13)}\n")
         output += text
@@ -349,7 +365,7 @@ def show_outgoing_material(app:application.App):
     # app.output_box.tag_configure('headline - bold', )
 
 
-def show_material_for_order(app:application.App):
+def show_material_for_order(app:application.App) -> None:
     app.disabled_button.config(state = 'enabled')
     app.disabled_button = app.button_sm_auftrag
     app.button_sm_auftrag.config(state = 'disabled')
@@ -357,7 +373,8 @@ def show_material_for_order(app:application.App):
     enabled = [app.sm_entry, app.print_button]
     disabled = [app.posnr_entry, app.matnr_entry, app.bestellt_label, app.bestellt_button, app.delete_button, app.combobox_loeschen]
     set_widget_status(enabled, disabled)
-
+    
+    app.sm_entry.focus()
     app.sm_entry.bind('<Return>', lambda _ : show_material_for_order(app))
     app.sm_entry.bind('<KeyRelease>', lambda _ : show_material_for_order(app))
     app.posnr_entry.unbind('<Return>')
@@ -424,11 +441,10 @@ def show_material_for_order(app:application.App):
     app.output_box.insert(1.0, output_text)
 
 
-def print_screen(app:application.App):
+def print_screen(app:application.App) -> None:
     answer = ctypes.windll.user32.MessageBoxW(0,"Soll der angezeigte Inhalt gedruckt werden?", "Drucken...", 68)
     if answer == 6:
         selection = app.output_box.get(1.0, 'end')
-        
         wb = xl.Workbook()
         sheet = wb.active
         sheet.column_dimensions['A'].width = 12
@@ -464,10 +480,7 @@ def print_screen(app:application.App):
         os.remove(f'{os.getcwd()}\\Ausgabe.xlsx')
 
         
-
-
-
-def book_outgoing_from_excel_file(app:application.App):
+def book_outgoing_from_excel_file(app:application.App) -> None:
     # ctypes.windll.user32.MessageBoxW(0,"Bitte im nächsten Fenster die exportierte Materialliste aus PSL auswählen.", "Warenausgang buchen...", 64)
     cursor:sqlite3.Cursor = app.cursor
     connection:sqlite3.Connection = app.connection
@@ -498,10 +511,8 @@ def book_outgoing_from_excel_file(app:application.App):
                 valid_entries.append(line)
                 continue
             
-            #if line['Material'] in standardmaterial and (line['Warenausgangsmenge'] > 0 or line['Positionstyp'] in (8,'8')):
             if line['Material'] in standardmaterial and (not pd.isnull(line['Lieferungen(ab/bis)']) or line['Positionstyp'] in (8,'8')):
                 valid_entries.append(line)
-        
         
         # check if position already exists in db
         for entry in valid_entries:
@@ -558,7 +569,7 @@ def book_outgoing_from_excel_file(app:application.App):
     show_critical_material(app)
 
 
-def book_ingoing_position(app:application.App):
+def book_ingoing_position(app:application.App) -> None:
     connection = app.connection
     cursor = app.cursor
     
@@ -608,10 +619,7 @@ def book_ingoing_position(app:application.App):
     show_ingoing_material(app)
 
 
-
-
-def filter_entries_to_delete(app:application.App):
-    
+def filter_entries_to_delete(app:application.App) -> None:
     cursor:sqlite3.Cursor = app.cursor
     
     app.disabled_button.config(state = 'enabled')
@@ -628,7 +636,6 @@ def filter_entries_to_delete(app:application.App):
     disabled.extend(app.filter_dict[app.combobox_loeschen.get()][1])
     set_widget_status(enabled, disabled)
 
-    
     app.sm_entry.bind('<KeyRelease>', lambda _ : filter_entries_to_delete(app))
     app.posnr_entry.bind('<KeyRelease>', lambda _ : filter_entries_to_delete(app))
     app.matnr_entry.bind('<KeyRelease>', lambda _ : filter_entries_to_delete(app))
@@ -659,7 +666,7 @@ def filter_entries_to_delete(app:application.App):
     app.output_box.insert(1.0, output)
 
 
-def delete_selected_entries(app:application.App):
+def delete_selected_entries(app:application.App) -> None:
     answer = ctypes.windll.user32.MessageBoxW(0,
                                               "Achtung!!\nAlle im Fenster angezeigten Einträge werden unwiderruflich gelöscht.\nBist du sicher, dass du die Einträge löschen willst?", 
                                               "Einträge löschen", 
@@ -672,9 +679,13 @@ def delete_selected_entries(app:application.App):
     app.connection.commit()
     filter_entries_to_delete(app)
 
-
    
-def add_kleinstmaterial(connection:sqlite3.Connection, cursor:sqlite3.Cursor, data:str):
+def add_kleinstmaterial(connection:sqlite3.Connection, cursor:sqlite3.Cursor, data:str) -> None:
+    ''' Adds a new entry in table 'Kleinstmaterial'
+        connection = sqlite3.Connection
+        cursor = sqlite3.Cursor
+        data = (matnr [int], bezeichnung [str], einheit [str], grenzwert [int], up_to [int], bestellt [bool])
+    '''
     matnr, bezeichnung, einheit, grenzwert, up_to, bestellt = data
     cursor.execute('''
                         INSERT INTO 
@@ -686,7 +697,13 @@ def add_kleinstmaterial(connection:sqlite3.Connection, cursor:sqlite3.Cursor, da
     connection.commit()
 
 
-def add_standardmaterial(connection:sqlite3.Connection, cursor:sqlite3.Cursor,  data:str):
+def add_standardmaterial(connection:sqlite3.Connection, cursor:sqlite3.Cursor,  data:tuple):
+    ''' Adds a new entry in table 'Standardmaterial'
+        connection = sqlite3.Connection
+        cursor = sqlite3.Cursor
+        data = (matnr [int], bezeichnung [str], einheit [str], grenzwert [int], up_to [int], bestellt [bool])
+    '''
+    
     matnr, bezeichnung, einheit, grenzwert, up_to, bestellt = data
     cursor.execute('''
                         INSERT INTO 
