@@ -460,12 +460,16 @@ def print_screen(app:application.App) -> None:
         #for cell in sheet._cells.values():
         #    cell.border = xl.styles.Border(bottom = border)
         for idx, row in enumerate(sheet, start = 1):
-            if row[0].value is None or row[0].value == '':
-                continue
+            #if row[0].value is None or row[0].value == '':
+            #    continue
             try:
                 _ = int(row[0].value)
                 for col in range(1,6):
                     sheet.cell(row = idx, column = col).border = xl.styles.Border(bottom = border)
+                if int(sheet.cell(row = idx, column = 4).value) > 1:
+                    for col in range(1,6):
+                        sheet.cell(row = idx, column = col).font = xl.styles.Font(color="FF0000", bold = True)
+
             except ValueError:
                 continue
         
