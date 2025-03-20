@@ -442,6 +442,8 @@ def show_material_for_order(app:application.App) -> None:
 
 
 def print_screen(app:application.App) -> None:
+    if not app.sm_entry.get():
+        return
     answer = ctypes.windll.user32.MessageBoxW(0,"Soll der angezeigte Inhalt gedruckt werden?", "Drucken...", 68)
     if answer == 6:
         selection = app.output_box.get(1.0, 'end')
@@ -452,16 +454,18 @@ def print_screen(app:application.App) -> None:
         sheet.column_dimensions['C'].width = 44
         sheet.column_dimensions['D'].width = 7
         sheet.column_dimensions['E'].width = 7
+        sheet.column_dimensions['F'].width = 3
+        for x in range(7,37):
+            if x % 2 == 1:
+                sheet.column_dimensions[xl.utils.cell.get_column_letter(x)].width = 1
+            else:
+                sheet.column_dimensions[xl.utils.cell.get_column_letter(x)].width = 3
         rows = selection.split('\n')
         for row, line in enumerate(rows, start = 1):
             for col, word in enumerate(line.split('\t'), start = 1):
                 sheet.cell(column =col, row = row, value = word)
         border = xl.styles.Side(border_style = 'thin', color = '000000')
-        #for cell in sheet._cells.values():
-        #    cell.border = xl.styles.Border(bottom = border)
         for idx, row in enumerate(sheet, start = 1):
-            #if row[0].value is None or row[0].value == '':
-            #    continue
             try:
                 _ = int(row[0].value)
                 for col in range(1,6):
@@ -469,7 +473,15 @@ def print_screen(app:application.App) -> None:
                 if int(sheet.cell(row = idx, column = 4).value) > 1:
                     for col in range(1,6):
                         sheet.cell(row = idx, column = col).font = xl.styles.Font(color="FF0000", bold = True)
-
+                if sheet.cell(row= idx, column = 5).value.strip() in ('ST', 'SA'):
+                    amount = int(sheet.cell(row= idx, column=4).value) * 2
+                else:
+                    amount = 2
+                for col in range(amount):
+                    if col % 2 == 0:
+                        continue
+                    sheet.cell(row = idx, column = col+7).border = xl.styles.Border(bottom = border, top = border, left = border, right = border)
+                
             except ValueError:
                 continue
         
