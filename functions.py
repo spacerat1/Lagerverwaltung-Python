@@ -449,6 +449,8 @@ def print_screen(app:application.App) -> None:
         selection = app.output_box.get(1.0, 'end')
         wb = xl.Workbook()
         sheet = wb.active
+        sheet.page_setup.orientation = 'landscape'
+        sheet.page_setup.fitToPage = True
         sheet.column_dimensions['A'].width = 12
         sheet.column_dimensions['B'].width = 11
         sheet.column_dimensions['C'].width = 44
@@ -486,14 +488,16 @@ def print_screen(app:application.App) -> None:
                 continue
         
         wb.save(f'{os.getcwd()}\\Ausgabe.xlsx')
-        excel_app = win32com.client.Dispatch('Excel.Application')
-        excel_app.Visible = False
-        wb = excel_app.Workbooks.Open(f'{os.getcwd()}\\Ausgabe.xlsx')
-        ws = wb.Worksheets([1])
-        ws.PrintOut()
-        wb.Close(False)
-        excel_app.Quit()
-        os.remove(f'{os.getcwd()}\\Ausgabe.xlsx')
+        try:
+            excel_app = win32com.client.Dispatch('Excel.Application')
+            excel_app.Visible = False
+            wb = excel_app.Workbooks.Open(f'{os.getcwd()}\\Ausgabe.xlsx')
+            ws = wb.Worksheets[1]
+            ws.PrintOut()
+        finally:
+            wb.Close(False)
+            excel_app.Quit()
+            os.remove(f'{os.getcwd()}\\Ausgabe.xlsx')
 
         
 def book_outgoing_from_excel_file(app:application.App) -> None:
