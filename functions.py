@@ -471,9 +471,11 @@ def print_screen(app:application.App) -> None:
         for idx, row in enumerate(sheet, start = 1):
             try:
                 _ = int(row[0].value)
+                # draw cell bottom lines
                 for col in range(1,6):
                     sheet.cell(row = idx, column = col).border = xl.styles.Border(bottom = border)
-                if int(sheet.cell(row = idx, column = 4).value) > 1:
+                # change font color to red when amount > 1 and unit is M or n/a
+                if int(sheet.cell(row = idx, column = 4).value) > 1 and sheet.cell(row= idx, column = 5).value.strip() in ('M', 'n/a'):
                     for col in range(1,6):
                         sheet.cell(row = idx, column = col).font = xl.styles.Font(color="FF0000", bold = True)
                 if sheet.cell(row= idx, column = 5).value.strip() in ('ST', 'SA'):
