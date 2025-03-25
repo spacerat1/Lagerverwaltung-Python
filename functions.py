@@ -442,6 +442,7 @@ def show_material_for_order(app:application.App) -> None:
 
 
 def print_screen(app:application.App) -> None:
+    file_path = f"{os.getcwd()}\\Ausgabe.xlsx"
     if not app.sm_entry.get():
         return
     answer = ctypes.windll.user32.MessageBoxW(0,"Soll der angezeigte Inhalt gedruckt werden?", "Drucken...", 68)
@@ -487,17 +488,18 @@ def print_screen(app:application.App) -> None:
             except ValueError:
                 continue
         
-        wb.save(f'{os.getcwd()}\\Ausgabe.xlsx')
+        wb.save(file_path)
         try:
             excel_app = win32com.client.Dispatch('Excel.Application')
             excel_app.Visible = False
-            wb = excel_app.Workbooks.Open(f'{os.getcwd()}\\Ausgabe.xlsx')
-            ws = wb.Worksheets[1]
-            ws.PrintOut()
+            wb = excel_app.Workbooks.Open(file_path)
+            wb.PrintOut()
+            #ws = wb.Worksheets[1]
+            #ws.PrintOut()
         finally:
             wb.Close(False)
             excel_app.Quit()
-            os.remove(f'{os.getcwd()}\\Ausgabe.xlsx')
+            os.remove(file_path)
 
         
 def book_outgoing_from_excel_file(app:application.App) -> None:
