@@ -95,6 +95,7 @@ def show_critical_material(app:application.App) -> None:
     date_dict = defaultdict(str)
     ingoing_query = "SELECT * FROM Wareneingang"
     outgoing_query = "SELECT * FROM Warenausgang"
+    outgoing_kleinst_query = "SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_BEZUG"
     threshhold_query = "SELECT * FROM Standardmaterial UNION SELECT * FROM Kleinstmaterial"
     standardmaterial_query = "SELECT * FROM Standardmaterial"
     kleinstmaterial_query = "SELECT * FROM Kleinstmaterial"
@@ -103,6 +104,8 @@ def show_critical_material(app:application.App) -> None:
     ingoing = cursor.fetchall()
     cursor.execute(outgoing_query)
     outgoing = cursor.fetchall()
+    cursor.execute(outgoing_kleinst_query)
+    outgoing_kleinst = cursor.fetchall()
     cursor.execute(threshhold_query)
     threshhold = cursor.fetchall()
     cursor.execute(standardmaterial_query)
@@ -125,6 +128,8 @@ def show_critical_material(app:application.App) -> None:
             outgoing_dict[row['MatNr']] -= menge
         elif row['PosTyp'] == 9:
             outgoing_dict[row['MatNr']] += menge
+    for row in outgoing_kleinst:
+        outgoing_dict[row['MatNr']] += row['Menge']
 
     for row in threshhold:
         threshhold_dict[row['MatNr']] = row['Grenzwert']
@@ -188,7 +193,7 @@ def toggle_ordered_status(app:application.App) -> None:
                                 WHERE MatNr = {mat_number}
                         ''')
         else:
-            datum = datetime.datetime.strftime(datetime.datetime.now(), r'%Y-%m-%d')
+            datum = datetime.datetime.strftime(datetime.datetime.now(), r'%d.%m.%Y')
             #datum = datetime.datetime.now()
             cursor.execute(''' UPDATE Standardmaterial
                                 SET bestellt = ?,
@@ -245,17 +250,23 @@ def show_stock(app: application.App) -> None:
     outgoing_query = "SELECT * FROM Warenausgang WHERE MatNr LIKE ?"
     cursor.execute(outgoing_query, (f'%{matnr}%',))
     outgoing = cursor.fetchall()
+    
     outgoing_dict = defaultdict(int)
     for row in outgoing:
         if row['Warenausgangsmenge'] != 0:
             menge = row['Warenausgangsmenge']
         else:
             menge = row['Bedarfsmenge']
-
         if row['PosTyp'] == 8:
             outgoing_dict[row['MatNr']] -= menge
         elif row['PosTyp'] == 9:
             outgoing_dict[row['MatNr']] += menge
+
+    outgoing_kleinst_query = "SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_BEZUG"
+    cursor.execute(outgoing_kleinst_query)
+    outgoing_kleinst = cursor.fetchall()
+    for row in outgoing_kleinst:
+        outgoing_dict[row['MatNr']] += row['Menge']
     
     material_query = "SELECT * FROM Standardmaterial UNION SELECT * FROM Kleinstmaterial"
     cursor.execute(material_query)
@@ -348,18 +359,31 @@ def show_outgoing_material(app:application.App) -> None:
     smnr = app.sm_entry.get()
     cursor.execute("SELECT * FROM Warenausgang WHERE MatNr LIKE ? AND SM_Nummer LIKE ? AND PosTyp = 9", (f'%{matnr}%', f'%{smnr}%',))
     selection = cursor.fetchall()
-    
+    output = ''
     headline = (f"{'Nr.'.rjust(5)}\t{'SM Nummer'.ljust(10)}\t{'Pos'.ljust(3)}\t{'Typ'.ljust(3)}  {'MatNr'.ljust(8)}\
 \t\t{'Bezeichnung'.ljust(50)}\t{'SD Beleg'.ljust(10)}\t{'Bedarfsmenge'.ljust(12)}\
 \t\t{'Warenausgangsmenge'.ljust(18)}\t{'Umbuchungsmenge'.ljust(15)}\t{'Lieferschein'.ljust(12)}\t{'Materialbeleg'.ljust(13)}\n")
-    output = headline if selection else 'Keine Daten gefunden. Bitte Filter überprüfen.'
-    for number, row in enumerate(selection, start = 1):
-        #print(f"{row['SM_Nummer']}\t{row['Warenausgangsmenge']}")
-        text = (f"{str(number).rjust(5)}\t{row['SM_Nummer'].ljust(10)}\t{row['Position'].ljust(3)}\t{str(row['PosTyp']).ljust(3)}  {str(row['MatNr']).ljust(8)}\
-\t\t{row['Bezeichnung'].ljust(50)}\t{row['SD_Beleg'][:10].ljust(10)}\t{str(row['Bedarfsmenge']).center(12)}\
-\t\t{str(row['Warenausgangsmenge']).center(18)}\t{str(row['Umbuchungsmenge']).center(15)}\t{row['Lieferschein'][:10].ljust(12)}\t{row['Materialbeleg'][:10].ljust(13)}\n")
-        output += text
-    
+    #output = headline if selection else 'Keine Daten gefunden. Bitte Filter überprüfen.'
+    start = 1
+    if selection:
+        output += headline
+        for number, row in enumerate(selection, start = start):
+            #print(f"{row['SM_Nummer']}\t{row['Warenausgangsmenge']}")
+            text = (f"{str(number).rjust(5)}\t{row['SM_Nummer'].ljust(10)}\t{row['Position'].ljust(3)}\t{str(row['PosTyp']).ljust(3)}  {str(row['MatNr']).ljust(8)}\
+    \t\t{row['Bezeichnung'].ljust(50)}\t{row['SD_Beleg'][:10].ljust(10)}\t{str(row['Bedarfsmenge']).center(12)}\
+    \t\t{str(row['Warenausgangsmenge']).center(18)}\t{str(row['Umbuchungsmenge']).center(15)}\t{row['Lieferschein'][:10].ljust(12)}\t{row['Materialbeleg'][:10].ljust(13)}\n")
+            output += text
+        start = number+1
+
+    cursor.execute("SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE MatNr LIKE ?", (f'%{matnr}%',))
+    selection_kleinst = cursor.fetchall()
+    if selection_kleinst:
+        output += '\nAusgabe Kleinstmaterial ohne SM Bezug\n'
+        output += (f"{'Nr.'.rjust(5)}\t{'MatNr'.ljust(8)}\t{'Bezeichnung'.ljust(50)}\n")
+        for number,row in enumerate(selection_kleinst, start = start):
+            output += (f"{str(number).rjust(5)}\t{str(row['Matnr']).ljust(8)}\t{row['Bezeichnung'].ljust(50)}\n")
+    if not selection and not selection_kleinst:
+        output += 'Keine Daten gefunden. Bitte Filter überprüfen.'
     app.output_box.delete(1.0, 'end')
     app.output_box.insert(1.0, output)
     # app.output_box.tag_configure('headline - bold', )
@@ -600,16 +624,15 @@ def book_ingoing_position(app:application.App) -> None:
     app.disabled_button.config(state = 'enabled')
     app.disabled_button = app.button_wareneingang_buchen
     app.button_wareneingang_buchen.config(state = 'disabled')
-    app.open_ingoing_window()
+    selection = 'SELECT * FROM Kleinstmaterial UNION SELECT * FROM Standardmaterial'
+    app.open_booking_window(selection)
     try:
         matnr = re.findall(r'\d{8}', app.ingoing_mat_string_var.get())[0]
     except IndexError:
-        #app.button_wareneingang_buchen.config(state = 'enabled')
         show_ingoing_material(app)
         return
     menge = app.ingoing_menge_var.get()
     if menge == 0:
-        #app.button_wareneingang_buchen.config(state = 'enabled')
         show_ingoing_material(app)
         return
     material_query =  "SELECT * FROM Standardmaterial WHERE MatNr = ? UNION SELECT * FROM Kleinstmaterial WHERE MatNr = ?"
@@ -641,6 +664,43 @@ def book_ingoing_position(app:application.App) -> None:
     connection.commit()
     app.button_wareneingang_buchen.config(state = 'enabled')
     show_ingoing_material(app)
+
+def book_outgoing_kleinstmaterial(app:application.App) -> None:
+    connection = app.connection
+    cursor = app.cursor
+    app.disabled_button.config(state = 'enabled')
+    app.disabled_button = app.button_warenausgang_buchen_Kleinstmaterial
+    app.button_warenausgang_buchen_Kleinstmaterial.config(state = 'disabled')
+    selection = 'SELECT * FROM Kleinstmaterial'
+    app.open_booking_window(selection)
+    try:
+        matnr = re.findall(r'\d{8}', app.ingoing_mat_string_var.get())[0]
+    except IndexError:
+        show_critical_material(app)
+        return
+    menge = app.ingoing_menge_var.get()
+    if menge == 0:
+        show_critical_material(app)
+        return
+    material_query =  "SELECT * FROM Kleinstmaterial WHERE MatNr = ?"
+    cursor.execute(material_query, (matnr,))
+    material = cursor.fetchall()[0]
+    bezeichnung = material['Bezeichnung']
+    einheit = material['Einheit']
+    answer = ctypes.windll.user32.MessageBoxW(0,f"Soll folgendes Material gebucht werden?\n\n{matnr}    '{bezeichnung}'       {menge} {einheit}", "Warenausgang buchen...", 68)
+    if answer != 6:
+        show_critical_material(app)
+        return
+    cursor.execute('''
+                        INSERT INTO
+                                Warenausgang_Kleinstmaterial_ohne_SM_Bezug (MatNr, Bezeichnung, Menge)
+                        VALUES 
+                                (?,?,?)
+                        ''',(matnr, bezeichnung, menge)
+                        )
+    connection.commit()
+    app.button_warenausgang_buchen_Kleinstmaterial.config(state = 'enabled')
+    show_critical_material(app)
 
 
 def filter_entries_to_delete(app:application.App) -> None:
