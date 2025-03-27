@@ -195,6 +195,11 @@ class App:
                                                          text = 'Warenausgang buchen\n(Excel aus PSL)',
                                                          command = lambda: fc.book_outgoing_from_excel_file(self))
             self.button_warenausgang_buchen.pack(side = tk.LEFT, padx = 5, pady = 5)
+            self.button_warenausgang_buchen_Kleinstmaterial = ttk.Button(self.frame_button_middle, 
+                                                         style = 'Blue.TButton', 
+                                                         text = 'Warenausgang buchen\n(nur Kleinstmaterial)',
+                                                         command = lambda: fc.book_outgoing_kleinstmaterial(self))
+            self.button_warenausgang_buchen_Kleinstmaterial.pack(side = tk.LEFT, padx = 5, pady = 5)
             if self.user == fc.ADMIN:
                 self.frame_button_middle.pack(side = tk.TOP, padx = 5, pady = 5)
             else:
@@ -300,9 +305,8 @@ class App:
         fc.show_critical_material(self)
         
 
-    def open_ingoing_window(self):
-        
-        self.cursor.execute('SELECT * FROM Kleinstmaterial UNION SELECT * FROM Standardmaterial')
+    def open_booking_window(self, selection):
+        self.cursor.execute(selection)
         materials = self.cursor.fetchall()
         values = [f"{row['MatNr']} {row['Bezeichnung']}" for row in materials]
         self.ingoing_mat_string_var = tk.StringVar()
