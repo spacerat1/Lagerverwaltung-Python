@@ -13,11 +13,6 @@ from tkinter import filedialog
 from collections import defaultdict
 
 
-ADMIN = 'admin'
-EXPERT = 'expert'
-STANDARD = 'standard'
-
-
 def open_db() -> str:
     settings = f"{os.environ['USERPROFILE']}\\Documents\\Lagerverwaltung_settings.txt"
     if not os.path.exists(settings):

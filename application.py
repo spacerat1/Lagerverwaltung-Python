@@ -4,6 +4,11 @@ import tkinter.ttk as ttk
 import functions as fc
 
 
+ADMIN = 'admin'
+EXPERT = 'expert'
+STANDARD = 'standard'
+
+
 class App:
     def __init__(self, connection:sqlite3.Connection, cursor:sqlite3.Cursor, user:str, path_to_db:str):
         self.user = user
@@ -186,10 +191,10 @@ class App:
         
         
         
-        if self.user == fc.ADMIN:
+        if self.user == ADMIN:
             self.frame_button_right.pack(side = tk.RIGHT, padx = 5, pady = 5)
 
-        if self.user in (fc.ADMIN, fc.EXPERT):
+        if self.user in (ADMIN, EXPERT):
             self.frame_button_middle = ttk.Frame(self.button_frame, style = 'Frame_grey.TFrame')
             self.button_wareneingang_buchen = ttk.Button(self.frame_button_middle, 
                                                          style = 'Blue.TButton', 
@@ -206,7 +211,7 @@ class App:
                                                          text = 'Warenausgang buchen\n(nur Kleinstmaterial)',
                                                          command = lambda: fc.book_outgoing_kleinstmaterial(self))
             self.button_warenausgang_buchen_Kleinstmaterial.pack(side = tk.LEFT, padx = 5, pady = 5)
-            if self.user == fc.ADMIN:
+            if self.user == ADMIN:
                 self.frame_button_middle.pack(side = tk.TOP, padx = 5, pady = 5)
             else:
                 self.frame_button_middle.pack(side = tk.LEFT, padx = 5, pady = 5)
@@ -229,7 +234,7 @@ class App:
         self.sm_entry = ttk.Entry(self.filter_frame, style = 'Comline.TEntry')
         self.sm_entry.pack(side = tk.LEFT, padx = 5, pady = 5)
 
-        if self.user == fc.ADMIN:
+        if self.user == ADMIN:
             self.posnr_label = ttk.Label(self.filter_frame, style = 'Comline.TLabel', text = 'Position / ID:')
             self.posnr_label.pack(side = tk.LEFT, padx = 5, pady = 10)
             self.posnr_entry.pack(side = tk.LEFT, padx = 5, pady = 10)
@@ -256,14 +261,14 @@ class App:
                                             text = 'angezeigte Daten loeschen',
                                             command = lambda:fc.delete_selected_entries(self))
         
-        if self.user in (fc.ADMIN, fc.EXPERT):
+        if self.user in (ADMIN, EXPERT):
             self.bestellt_label.pack(side = tk.LEFT, padx = 50, pady = 5)
             self.bestellt_button.pack(side = tk.LEFT, padx = 50, pady = 5)
-        if self.user == fc.STANDARD:
+        if self.user == STANDARD:
                self.print_button.pack(side = tk.TOP, pady = 5)
         else:
                self.print_button.pack(side = tk.LEFT, pady = 5)
-        if self.user == fc.ADMIN:    
+        if self.user == ADMIN:    
             self.delete_button.pack(side = tk.LEFT, pady = 5)
             
         self.entry_frame.pack(side = tk.BOTTOM, fill = 'x')
