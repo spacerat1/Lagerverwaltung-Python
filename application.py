@@ -20,7 +20,7 @@ class App:
         
         self.style = ttk.Style()
         # print(self.style.theme_names())
-        self.style.theme_use('classic') # theme 'alt' nutzen und ändern
+        self.style.theme_use('classic') # theme 'classic' nutzen und ändern
         # Verhalten der Buttons festlegen - Farbänderung beim Hovern etc.
         self.style.map('Comline.TButton', 
                     background=[('active','forest green'),('disabled', 'forest green')],
@@ -118,6 +118,12 @@ class App:
                                    style = 'Red.TLabel', 
                                    text = f'Pfad zur Datenbank: {self.path_to_db}',
                                    anchor = 'w')
+        
+        if 'Service-Center' in self.path_to_db:
+            color = 'forest green'
+        else:
+            color = 'orange red'
+        self.label_top_path_to_db.configure(foreground = color)
         
         self.button_change_db = ttk.Button(self.frame_top, 
                                            style = 'Comline.TButton',
@@ -293,7 +299,8 @@ class App:
                                'Standardmaterial' : ('SELECT * FROM Standardmaterial WHERE Matnr LIKE ?', '%matnr%,'),
                                'Warenausgabe_Comline' :('SELECT * FROM Warenausgabe_Comline WHERE SM_Nummer LIKE ? AND MatNr LIKE ?', r'%sm%,%matnr%'),
                                'Warenausgang' : ('SELECT * FROM Warenausgang WHERE SM_Nummer LIKE ? AND MatNr LIKE ?', r'%sm%,%matnr%'),
-                               'Wareneingang' : ('SELECT * FROM Wareneingang WHERE ID = ?', 'posnr,')}
+                               'Wareneingang' : ('SELECT * FROM Wareneingang WHERE ID = ?', 'posnr,'),
+                               'Warenausgang_Kleinstmaterial_ohne_SM_Bezug':('SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE ID = ?', 'posnr,')}
         self.filter_dict = {'Kleinstmaterial' : ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
                             'Standardmaterial' : ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
                             'Warenausgabe_Comline' : ([self.matnr_entry, self.sm_entry], [self.posnr_entry]),

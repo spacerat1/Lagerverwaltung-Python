@@ -47,6 +47,11 @@ def change_db_path(app:application.App = None) -> str:
     if app:
         app.path_to_db = path_to_db
         app.label_top_path_to_db.configure(text = f'Pfad zur Datenbank: {app.path_to_db}')
+        if 'Service-Center' in app.path_to_db:
+            color = 'forest green'
+        else:
+            color = 'orange red'
+        app.label_top_path_to_db.configure(foreground = color)
         app.connection.close()
         app.connection = sqlite3.connect(path_to_db)
         app.connection.row_factory = sqlite3.Row
@@ -375,13 +380,19 @@ def show_outgoing_material(app:application.App) -> None:
             output += text
         start = number+1
 
-    cursor.execute("SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE MatNr LIKE ?", (f'%{matnr}%',))
-    selection_kleinst = cursor.fetchall()
-    if selection_kleinst:
-        output += '\nAusgabe Kleinstmaterial ohne SM Bezug\n'
-        output += (f"{'Nr.'.rjust(5)}\t{'MatNr'.ljust(8)}\t{'Bezeichnung'.ljust(50)}\n")
-        for number,row in enumerate(selection_kleinst, start = start):
-            output += (f"{str(number).rjust(5)}\t{str(row['Matnr']).ljust(8)}\t{row['Bezeichnung'].ljust(50)}\n")
+    selection_kleinst = ''
+    if not app.sm_entry.get():
+        unit_query = "SELECT * FROM Kleinstmaterial"
+        cursor.execute(unit_query)
+        units = cursor.fetchall()
+        units_dict = {unit['MatNr']: unit['Einheit'] for unit in units}
+        cursor.execute("SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE MatNr LIKE ?", (f'%{matnr}%',))
+        selection_kleinst = cursor.fetchall()
+        if selection_kleinst:
+            output += '\nAusgabe Kleinstmaterial ohne SM Bezug\n'
+            output += (f"{'Nr.'.rjust(5)}\t{'MatNr'.ljust(8)}\t{'Bezeichnung'.ljust(50)}\t{'Menge'.ljust(5)}\t{'Einheit'.ljust(7)}\n")
+            for number,row in enumerate(selection_kleinst, start = start):
+                output += (f"{str(number).rjust(5)}\t{str(row['Matnr']).ljust(8)}\t{row['Bezeichnung'].ljust(50)}\t{str(row['Menge']).center(5)}\t{units_dict[row['MatNr']].center(6)}\n")
     if not selection and not selection_kleinst:
         output += 'Keine Daten gefunden. Bitte Filter überprüfen.'
     app.output_box.delete(1.0, 'end')
