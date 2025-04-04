@@ -8,7 +8,7 @@ import application
 # EXPERT = Lese / Schreibrechte
 # ADMIN = Lese/Schreibrechte und Daten löschen
 
-user = application.ADMIN
+user = application.EXPERT
 
 # Verbindung zur Datenbank aufbauen
 path_to_db= fc.open_db()

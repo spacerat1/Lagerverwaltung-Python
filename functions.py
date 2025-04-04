@@ -473,7 +473,11 @@ def show_material_for_order(app:application.App) -> None:
 
 def print_screen(app:application.App) -> None:
     file_path = f"{os.getcwd()}\\Ausgabe.xlsx"
-    if not app.sm_entry.get():
+    if len(app.sm_entry.get()) < 4:
+        ctypes.windll.user32.MessageBoxW(0,
+                                         "Um Fehlausdrucke zu vermeiden müssen im Filter SM-Nummer \nmindestens 4 Zeichen eingetragen sein.", 
+                                         "Zu wenig Zeichen bei SM Nummer", 
+                                         64)
         return
     answer = ctypes.windll.user32.MessageBoxW(0,"Soll der angezeigte Inhalt gedruckt werden?", "Drucken...", 68)
     if answer == 6:
@@ -535,11 +539,18 @@ def print_screen(app:application.App) -> None:
 
         
 def book_outgoing_from_excel_file(app:application.App) -> None:
+    
+    app.disabled_button.config(state = 'enabled')
+    app.disabled_button = app.button_warenausgang_buchen
+    enabled = []
+    disabled = [app.sm_entry, app.posnr_entry, app.matnr_entry, app.delete_button, app.print_button, app.combobox_loeschen,app.bestellt_button, app.bestellt_label, ]
+    set_widget_status(enabled, disabled)
     # ctypes.windll.user32.MessageBoxW(0,"Bitte im nächsten Fenster die exportierte Materialliste aus PSL auswählen.", "Warenausgang buchen...", 64)
     cursor:sqlite3.Cursor = app.cursor
     connection:sqlite3.Connection = app.connection
     path_to_excel = filedialog.askopenfilenames(defaultextension = 'xlsx', title = 'Bitte die EXPORT Datei aus PSL wählen - Mehrfachauswahl ist möglich...')
     if not path_to_excel:
+        show_critical_material(app)
         return
     all_rows = new_entries = no_booking = already_exists = 0
     
@@ -630,6 +641,10 @@ def book_ingoing_position(app:application.App) -> None:
     app.disabled_button.config(state = 'enabled')
     app.disabled_button = app.button_wareneingang_buchen
     app.button_wareneingang_buchen.config(state = 'disabled')
+    enabled = []
+    disabled = [app.sm_entry, app.posnr_entry, app.matnr_entry, app.delete_button, app.print_button, app.combobox_loeschen,app.bestellt_button, app.bestellt_label, ]
+    set_widget_status(enabled, disabled)
+
     selection = 'SELECT * FROM Kleinstmaterial UNION SELECT * FROM Standardmaterial'
     app.open_booking_window(selection)
     try:
@@ -677,6 +692,11 @@ def book_outgoing_kleinstmaterial(app:application.App) -> None:
     app.disabled_button.config(state = 'enabled')
     app.disabled_button = app.button_warenausgang_buchen_Kleinstmaterial
     app.button_warenausgang_buchen_Kleinstmaterial.config(state = 'disabled')
+    enabled = []
+    disabled = [app.sm_entry, app.posnr_entry, app.matnr_entry, app.delete_button, app.print_button, app.combobox_loeschen,app.bestellt_button, app.bestellt_label, ]
+    set_widget_status(enabled, disabled)
+    
+    
     selection = 'SELECT * FROM Kleinstmaterial'
     app.open_booking_window(selection)
     try:
