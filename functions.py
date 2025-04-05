@@ -644,9 +644,12 @@ def book_ingoing_position(app:application.App) -> None:
     enabled = []
     disabled = [app.sm_entry, app.posnr_entry, app.matnr_entry, app.delete_button, app.print_button, app.combobox_loeschen,app.bestellt_button, app.bestellt_label, ]
     set_widget_status(enabled, disabled)
-
+    title = 'Wareneingang buchen (Anlieferung CTDI)' 
     selection = 'SELECT * FROM Kleinstmaterial UNION SELECT * FROM Standardmaterial'
-    app.open_booking_window(selection)
+    app.open_booking_window(title, selection)
+    if app.user_closed_window:
+        show_ingoing_material(app)
+        return
     try:
         matnr = re.findall(r'\d{8}', app.ingoing_mat_string_var.get())[0]
     except IndexError:
@@ -686,6 +689,7 @@ def book_ingoing_position(app:application.App) -> None:
     app.button_wareneingang_buchen.config(state = 'enabled')
     show_ingoing_material(app)
 
+
 def book_outgoing_kleinstmaterial(app:application.App) -> None:
     connection = app.connection
     cursor = app.cursor
@@ -696,9 +700,12 @@ def book_outgoing_kleinstmaterial(app:application.App) -> None:
     disabled = [app.sm_entry, app.posnr_entry, app.matnr_entry, app.delete_button, app.print_button, app.combobox_loeschen,app.bestellt_button, app.bestellt_label, ]
     set_widget_status(enabled, disabled)
     
-    
+    title = 'Kleinstmaterial ohne SM Bezug herausgeben'
     selection = 'SELECT * FROM Kleinstmaterial'
-    app.open_booking_window(selection)
+    app.open_booking_window(title, selection)
+    if app.user_closed_window:
+        show_critical_material(app)
+        return
     try:
         matnr = re.findall(r'\d{8}', app.ingoing_mat_string_var.get())[0]
     except IndexError:
@@ -790,6 +797,13 @@ def delete_selected_entries(app:application.App) -> None:
     filter_entries_to_delete(app)
 
    
+def confirm_user_input(app:application.App):
+    app.stck_entry.unbind('<Return>') 
+    app.user_closed_window = False
+    app.ingoing_window.quit() 
+    app.ingoing_window.destroy()
+
+
 def add_kleinstmaterial(connection:sqlite3.Connection, cursor:sqlite3.Cursor, data:str) -> None:
     ''' Adds a new entry in table 'Kleinstmaterial'
         connection = sqlite3.Connection
