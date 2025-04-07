@@ -13,7 +13,14 @@ class App:
     '''
     This class creates the front-end for a warehouse management sqlite3 database.
 
-    top_buttons:
+    args:
+        - connection: sqlite3.Connection to the database
+        - cursor: sqlite3.Cursor
+        - user: user privileges (STANDARD, EXPERT. ADMIN)
+        - path_to_db: where the sqlite3 database is located
+
+    Meaning of buttons and filter in this app:
+    <top_buttons>
         - STANDARD (all users)- 
         Pfad ändern: changes the path to the underlying sqlite3 database
         Kritisches Material anzeigen: shows material, that is below a certain threshhold
@@ -28,12 +35,12 @@ class App:
         - ADMIN - 
         Einträge aus Datenbank löschen: select entries you want to delete from the underlying sqlite3 database
         Combobox: choose from which underlying table you want to delete entries
-    filters:
+    <filters>
         - dependent on which button was pressed, the filters are active / inactive -
         Materialnummer: material number
         SM Nummer: work order
         Position / ID: position or ID in the underlying sqlite3 database table
-    bottom_buttons:
+    <bottom_buttons>
         - STANDARD - 
         Drucken: only available after 'Material für SM Auftrag anzeigen' button was pressed
                 * exports the shown text into an Excel file, formats it and prints it on the standard printer
