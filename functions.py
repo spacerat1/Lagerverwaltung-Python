@@ -66,15 +66,7 @@ def set_widget_status(enabled: list[ttk.Widget], disabled:list[ttk.Widget]) -> N
             entry.config(state = 'disabled')
     
 
-def show_critical_material(app:application.App) -> None:
-    app.disabled_button.config(state = 'enabled')
-    app.disabled_button = app.button_krit_mat
-    app.button_krit_mat.config(state = 'disabled')
-    
-    enabled = [app.bestellt_button, app.bestellt_label, ]
-    disabled = [app.sm_entry, app.posnr_entry, app.matnr_entry, app.delete_button, app.print_button, app.combobox_loeschen ]
-    set_widget_status(enabled, disabled)
-    
+def unbind_all_widgets(app:application.App) -> None:
     app.matnr_entry.unbind('<Return>')
     app.matnr_entry.unbind('<KeyRelease>')
     app.sm_entry.unbind('<Return>')
@@ -83,38 +75,28 @@ def show_critical_material(app:application.App) -> None:
     app.posnr_entry.unbind('<KeyRelease>')
     app.combobox_loeschen.unbind('<<ComboboxSelected>>')
 
-    cursor = app.cursor
-    output_box = app.output_box
 
+def show_critical_material(app:application.App) -> None:
+    app.disabled_button.config(state = 'enabled')
+    app.disabled_button = app.button_krit_mat
+    app.button_krit_mat.config(state = 'disabled')
+    
+    enabled = [app.bestellt_button, app.bestellt_label, ]
+    disabled = [app.sm_entry, app.posnr_entry, app.matnr_entry, app.delete_button, app.print_button, app.combobox_loeschen ]
+    set_widget_status(enabled, disabled)
+    unbind_all_widgets(app)
+
+    cursor = app.cursor
     ingoing_dict = defaultdict(int)
     outgoing_dict = defaultdict(int)
-    threshhold_dict = defaultdict(int)
-    auffuellen_dict = defaultdict(int)
-    namen_dict = defaultdict(str)
-    bestellt_dict = defaultdict(int)
+    already_ordered_dict = defaultdict(int)
     date_dict = defaultdict(str)
-    ingoing_query = "SELECT * FROM Wareneingang"
-    outgoing_query = "SELECT * FROM Warenausgang"
-    outgoing_kleinst_query = "SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_BEZUG"
-    threshhold_query = "SELECT * FROM Standardmaterial UNION SELECT * FROM Kleinstmaterial"
-    standardmaterial_query = "SELECT * FROM Standardmaterial"
-    kleinstmaterial_query = "SELECT * FROM Kleinstmaterial"
     
-    cursor.execute(ingoing_query)
-    ingoing = cursor.fetchall()
-    cursor.execute(outgoing_query)
-    outgoing = cursor.fetchall()
-    cursor.execute(outgoing_kleinst_query)
-    outgoing_kleinst = cursor.fetchall()
-    cursor.execute(threshhold_query)
-    threshhold = cursor.fetchall()
-    cursor.execute(standardmaterial_query)
-    standard = cursor.fetchall()
-    cursor.execute(kleinstmaterial_query)
-    kleinst = cursor.fetchall()
-    standardmaterial = [row['MatNr'] for row in standard]
-    kleinstmaterial = [row['MatNr'] for row in kleinst]
-
+    ingoing = cursor.execute("SELECT * FROM Wareneingang").fetchall()
+    outgoing = cursor.execute("SELECT * FROM Warenausgang").fetchall()
+    outgoing_small_material = cursor.execute("SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_BEZUG").fetchall()
+    all_materials = cursor.execute("SELECT * FROM Standardmaterial UNION SELECT * FROM Kleinstmaterial").fetchall()
+    # calculate the stock
     for row in ingoing:
         ingoing_dict[row['MatNr']] += row['Menge']
 
@@ -128,85 +110,96 @@ def show_critical_material(app:application.App) -> None:
             outgoing_dict[row['MatNr']] -= menge
         elif row['PosTyp'] == 9:
             outgoing_dict[row['MatNr']] += menge
-    for row in outgoing_kleinst:
+    for row in outgoing_small_material:
         outgoing_dict[row['MatNr']] += row['Menge']
 
-    for row in threshhold:
-        threshhold_dict[row['MatNr']] = row['Grenzwert']
-        auffuellen_dict[row['MatNr']] = row['Auffüllen']
-        namen_dict[row['MatNr']] = row['Bezeichnung']
-        bestellt_dict[row['MatNr']] = 'nein' if row['bestellt'] == 0 else 'ja'
+    for row in all_materials:
+        already_ordered_dict[row['MatNr']] = 'nein' if row['bestellt'] == 0 else 'ja'
         date_dict[row['MatNr']] = row['Datum'] if row['bestellt'] else ''
 
-    kleinstmaterial_output= []
-    standardmaterial_output = []
+    # formatting the putput
+    small_material_output= []
+    standard_material_output = []
     for matnr, booked in sorted(outgoing_dict.items()):
-        if ingoing_dict[matnr] - booked <= threshhold_dict[matnr]:
-            text_line = f"  {str(matnr).ljust(10)}{namen_dict[matnr].ljust(50)}{str(ingoing_dict[matnr]-booked).center(7)}{str(auffuellen_dict[matnr]).center(18)}{bestellt_dict[matnr].center(10)}{str(date_dict[matnr]).center(19)}"
-            if matnr in standardmaterial:
-                standardmaterial_output.append(text_line)
-            elif matnr in kleinstmaterial:
-                kleinstmaterial_output.append(text_line)
+        if ingoing_dict[matnr] - booked <= app.threshhold_dict[matnr]:
+            output = [matnr, app.materialnames_dict[matnr], ingoing_dict[matnr]-booked, app.units_dict[matnr], app.recommended_amount_dict[matnr], already_ordered_dict[matnr], date_dict[matnr]]
+            if matnr in app.standard_materials:
+                standard_material_output.append(output)
+            elif matnr in app.small_materials:
+                small_material_output.append(output)
     
-    headline = (f"  {'MatNr.'.ljust(10)}{'Bezeichnung'.ljust(50)}{'Bestand'.ljust(9)}{'empfohlene Menge'.ljust(18)}{'bestellt?'.ljust(11)}{' '.ljust(2)}Datum\n")
-    output_string_standard = '\n'.join(standardmaterial_output)
-    output_string_kleinst = '\n'.join(kleinstmaterial_output)
-    output_string = ("\n Das unten aufgeführte Material wird langsam knapp. Bitte nachbestellen.\n Um bestelltes Material als 'bestellt' zu markieren, bitte die entsprechenden Materialnummern mit der Maus markieren und dann den Knopf drücken.\n\n  Kritische Lagerbestände\n\n  Standardmaterial\n")
-    output_string += headline
-    output_string += ("-"*130)
-    output_string += '\n'
-    output_string += output_string_standard
-    output_string += ("\n\n  Kleinstmaterial\n")
-    output_string += headline
-    output_string += ('-'*130)
-    output_string += '\n'
-    output_string += output_string_kleinst
-    output_box.delete(1.0, 'end')
-    output_box.insert(1.0, output_string)
+    # fill the treeview widget
+    for item in app.output_listbox.get_children():
+        app.output_listbox.delete(item)
+    columns = ['MatNr.', 'Bezeichnung', 'Bestand', 'Einheit', 'empfohlene Menge', 'bestellt', 'Datum', 'LAST_COLUMN']
+    app.output_listbox.configure(columns = columns)
+    for column in columns:
+        if column == 'LAST_COLUMN':
+            continue
+        width, anchor = app.columns_dict[column]
+        app.output_listbox.heading(column, text = column)
+        app.output_listbox.column(column, width = width, anchor = anchor, stretch = tk.NO)
+    
+    app.output_listbox.column('#0', width = 200, stretch = tk.NO) #erste Spalte fixieren (dort, wo das Parent erscheint)
+    if standard_material_output:
+        tree_standard = app.output_listbox.insert('', 'end', text = 'Standardmaterial', open = True)
+        for entry in standard_material_output:
+            app.output_listbox.insert(tree_standard, "end", values = entry)
+    if small_material_output:
+        tree_small_material = app.output_listbox.insert('', 'end', text = 'Kleinstmaterial', open = True)
+        for entry in small_material_output:
+            app.output_listbox.insert(tree_small_material, "end", values = entry)
     
 
 def toggle_ordered_status(app:application.App) -> None:
     connection:sqlite3.Connection = app.connection
     cursor:sqlite3.Cursor = app.cursor
-    try:
-        selected_text = app.output_box.get(tk.SEL_FIRST, tk.SEL_LAST)
-    except tk.TclError:
-        return
-    mat_numbers = re.findall(r'\d{8}', selected_text)
-    if not mat_numbers:
-        return
-    
+
+    selections =  app.output_listbox.selection()
+    mat_numbers = []
+    for selection in selections:
+        values = app.output_listbox.item(selection, 'values')
+        if not values:
+            continue
+        mat_numbers.append(values[0])
+
     for mat_number in mat_numbers:
-        
-        cursor.execute(f'''SELECT bestellt FROM Standardmaterial WHERE MatNr = {mat_number} 
-                    UNION SELECT bestellt FROM Kleinstmaterial WHERE MatNr = {mat_number}''')
+        cursor.execute('''SELECT bestellt 
+                       FROM Standardmaterial 
+                       WHERE MatNr = ? 
+                       UNION SELECT bestellt 
+                       FROM Kleinstmaterial 
+                       WHERE MatNr = ?
+                       ''', (mat_number, mat_number)
+                       )
         status = cursor.fetchone()[0]
         status = not status
-
         if not status:
-            cursor.execute(f''' UPDATE Standardmaterial
-                                SET bestellt = {status}
-                                WHERE MatNr = {mat_number}
-                        ''')
-            cursor.execute(f''' UPDATE Kleinstmaterial
-                                SET bestellt = {status}
-                                WHERE MatNr = {mat_number}
-                        ''')
+            cursor.execute( ''' UPDATE Standardmaterial
+                                SET bestellt = ?
+                                WHERE MatNr = ?
+                            ''',(status, mat_number)
+                            )
+            cursor.execute( ''' UPDATE Kleinstmaterial
+                                SET bestellt = ?
+                                WHERE MatNr = ?
+                            ''', (status, mat_number)
+                           )
         else:
-            datum = datetime.datetime.strftime(datetime.datetime.now(), r'%d.%m.%Y')
+            datum = datetime.datetime.strftime(datetime.datetime.now(), r'%d.%m.%Y %H:%M')
             #datum = datetime.datetime.now()
-            cursor.execute(''' UPDATE Standardmaterial
+            cursor.execute( ''' UPDATE Standardmaterial
                                 SET bestellt = ?,
                                     Datum = ?
                                 WHERE MatNr = ? 
-                           ''', (status, datum, mat_number))
-            cursor.execute(''' UPDATE Kleinstmaterial
+                            ''', (status, datum, mat_number)
+                            )
+            cursor.execute( ''' UPDATE Kleinstmaterial
                                 SET bestellt = ?,
                                     Datum = ?
                                 WHERE MatNr = ?
-                            ''',(status, datum, mat_number))
-
-            
+                            ''',(status, datum, mat_number)
+                            )   
     connection.commit()
     show_critical_material(app)    
 
@@ -219,38 +212,21 @@ def show_stock(app: application.App) -> None:
     enabled = [app.matnr_entry]
     disabled = [app.posnr_entry, app.sm_entry, app.bestellt_button, app.bestellt_label, app.delete_button, app.print_button, app.combobox_loeschen]
     set_widget_status(enabled, disabled)
-    
-    app.sm_entry.unbind('<Return>')
-    app.sm_entry.unbind('<KeyRelease>')
-    app.posnr_entry.unbind('<Return>')
-    app.posnr_entry.unbind('<KeyRelease>')
-    app.combobox_loeschen.unbind('<<ComboboxSelected>>')
+    unbind_all_widgets(app)
     app.matnr_entry.bind('<Return>', lambda _ : show_stock(app))
     app.matnr_entry.bind('<KeyRelease>', lambda _: show_stock(app))
-    
     app.matnr_entry.focus()
 
     cursor = app.cursor
     matnr_entry = app.matnr_entry
-    output_box = app.output_box
     matnr = matnr_entry.get()
     
-    standardmaterial_query = "SELECT * FROM Standardmaterial"
-    cursor.execute(standardmaterial_query)
-    standardmaterial = cursor.fetchall()
-    standardmaterial_list = [row['MatNr'] for row in standardmaterial]
-    
-    ingoing_query = "SELECT * FROM Wareneingang WHERE MatNr LIKE ?"
-    cursor.execute(ingoing_query, (f'%{matnr}%',))
-    ingoing = cursor.fetchall()
+    ingoing = cursor.execute("SELECT * FROM Wareneingang WHERE MatNr LIKE ?", (f'%{matnr}%',)).fetchall()
     ingoing_dict = defaultdict(int)
     for row in ingoing:
         ingoing_dict[row['MatNr']] += row['Menge']
     
-    outgoing_query = "SELECT * FROM Warenausgang WHERE MatNr LIKE ?"
-    cursor.execute(outgoing_query, (f'%{matnr}%',))
-    outgoing = cursor.fetchall()
-    
+    outgoing = cursor.execute("SELECT * FROM Warenausgang WHERE MatNr LIKE ?", (f'%{matnr}%',)).fetchall()
     outgoing_dict = defaultdict(int)
     for row in outgoing:
         if row['Warenausgangsmenge'] != 0:
@@ -262,41 +238,42 @@ def show_stock(app: application.App) -> None:
         elif row['PosTyp'] == 9:
             outgoing_dict[row['MatNr']] += menge
 
-    outgoing_kleinst_query = "SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_BEZUG"
-    cursor.execute(outgoing_kleinst_query)
-    outgoing_kleinst = cursor.fetchall()
-    for row in outgoing_kleinst:
+    outgoing_small_material = cursor.execute("SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_BEZUG").fetchall()
+    for row in outgoing_small_material:
         outgoing_dict[row['MatNr']] += row['Menge']
+
     
-    material_query = "SELECT * FROM Standardmaterial UNION SELECT * FROM Kleinstmaterial"
-    cursor.execute(material_query)
-    material = cursor.fetchall()
-    material_dict = defaultdict(list)
-    for row in material:
-        if row['MatNr'] in standardmaterial_list:
-            Zuordnung = 'Standardmaterial'
-        else:
-            Zuordnung = 'Kleinstmaterial'
-        material_dict[row['MatNr']] = (row['Bezeichnung'], row['Einheit'], Zuordnung)
     
-    result = []
+    standardmaterial_list = []
+    small_material_list = []
     for matnr, menge in ingoing_dict.items():
         bestand = menge - outgoing_dict.get(matnr, 0)
-        bezeichnung = material_dict[matnr][0]
-        einheit = material_dict[matnr][1]
-        zuordnung = material_dict[matnr][2]
-        result.append((matnr, bezeichnung, bestand, einheit, zuordnung))
+        bezeichnung = app.materialnames_dict[matnr]
+        einheit = app.units_dict[matnr]
+        if matnr in app.standard_materials:
+            standardmaterial_list.append((matnr, bezeichnung, bestand, einheit))
+        else:
+            small_material_list.append((matnr, bezeichnung, bestand, einheit))
     
-    output_string = f"  {'MatNr.'.ljust(8)}\t\t{'Bezeichnung'.ljust(50)}\tBestand{' '*5}Einheit{' '*10}{'Zuordnung'.center(16)}\n"
-    output_material = ''
-    for matnr, bezeichnung, bestand, einheit, zuordnung in sorted(result):
-        output_material += f"  {matnr}\t\t{bezeichnung.ljust(50)}{str(bestand).center(7)}{' '*5}{einheit.center(7)}{' ' *10}{zuordnung}\n"
-    if not output_material:
-        output_string = '\nKeine Datensätze gefunden. Bitte Filter überprüfen.'
-    else:
-        output_string += output_material
-    output_box.delete(1.0, 'end')
-    output_box.insert(1.0, output_string)
+    for item in app.output_listbox.get_children():
+        app.output_listbox.delete(item)
+    columns = ['MatNr.', 'Bezeichnung', 'Bestand', 'Einheit', 'LAST_COLUMN']
+    app.output_listbox.configure(columns = columns)
+    for column in columns:
+        if column == 'LAST_COLUMN':
+            continue
+        width, anchor = app.columns_dict[column]
+        app.output_listbox.heading(column, text = column)
+        app.output_listbox.column(column, width = width, anchor = anchor, stretch = tk.NO)
+    app.output_listbox.column('#0', width = 200, stretch = tk.NO) #erste Spalte fixieren (dort, wo das Parent erscheint)
+    
+    tree_standard = app.output_listbox.insert('', 'end', text = 'Standardmaterial', open = True)
+    for entry in standardmaterial_list:
+        app.output_listbox.insert(tree_standard, "end", values = entry)
+    
+    tree_small_material = app.output_listbox.insert('', 'end', text = 'Kleinstmaterial', open = True)
+    for entry in small_material_list:
+        app.output_listbox.insert(tree_small_material, "end", values = entry)
     
      
 def show_ingoing_material(app:application.App) -> None:
@@ -307,33 +284,36 @@ def show_ingoing_material(app:application.App) -> None:
     enabled = [app.matnr_entry]
     disabled = [app.sm_entry, app.posnr_entry, app.bestellt_label, app.bestellt_button, app.delete_button, app.print_button, app.combobox_loeschen]
     set_widget_status(enabled, disabled)
+    unbind_all_widgets(app)
     app.matnr_entry.focus()
-    app.sm_entry.unbind('<Return>')
-    app.sm_entry.unbind('<KeyRelease>')
-    app.posnr_entry.unbind('<Return>')
-    app.posnr_entry.unbind('<KeyRelease>')
     app.matnr_entry.bind('<Return>', lambda _ : show_ingoing_material(app))
     app.matnr_entry.bind('<KeyRelease>', lambda _: show_ingoing_material(app))
-    app.combobox_loeschen.unbind('<<ComboboxSelected>>')
-
+    
     cursor:sqlite3.Cursor = app.cursor
     matnr = app.matnr_entry.get()
-    cursor.execute("SELECT * FROM Wareneingang WHERE MatNr LIKE ?", (f'%{matnr}%',))
-    selection = cursor.fetchall()
-    einheits_query = "SELECT * FROM Kleinstmaterial UNION SELECT * FROM Standardmaterial"
-    cursor.execute(einheits_query)
-    einheiten = cursor.fetchall()
-    einheitsdict = {row['MatNr']:row['Einheit'] for row in einheiten}
-    headline = (f"{'ID'.rjust(5)}\t{'MatNr.'.ljust(8)} \t{'Bezeichnung'.ljust(50)}  {'Menge'.ljust(8)}\
-\t\tEinheit\t{'Datum'.ljust(10)}\n")
-    output = headline if selection else '\nKeine Datensätze gefunden. Bitte Filter überprüfen.'
-    for row in selection[::-1]:
-        text = (f"{str(row['ID']).rjust(5)}\t{str(row['MatNr']).ljust(8)} \t{row['Bezeichnung'].ljust(50)}  {str(row['Menge']).center(8)}\
-\t\t{einheitsdict[row['MatNr']].center(7)}\t{row['Datum'].ljust(10)}\n")
-        output += text
+    selection = cursor.execute("SELECT * FROM Wareneingang WHERE MatNr LIKE ?", (f'%{matnr}%',)).fetchall()
     
-    app.output_box.delete(1.0, 'end')
-    app.output_box.insert(1.0, output)
+    for item in app.output_listbox.get_children():
+        app.output_listbox.delete(item)
+    
+    columns = ['ID', 'MatNr.', 'Bezeichnung', 'Menge', 'Einheit', 'Datum', 'LAST_COLUMN']
+    app.output_listbox.configure(columns = columns)
+    for column in columns:
+        if column == 'LAST_COLUMN':
+            continue
+        width, anchor = app.columns_dict[column]
+        app.output_listbox.heading(column, text = column)
+        app.output_listbox.column(column, width = width, anchor = anchor, stretch = tk.NO)
+    
+    for entry in selection[::-1]:
+        date = datetime.datetime.strftime(datetime.datetime.strptime(entry['Datum'], r"%Y-%m-%d %H:%M:%S"), r"%d.%m.%Y %H:%M:%S")
+        app.output_listbox.insert('', "end", values = (entry['ID'],
+                                                       entry['MatNr'],
+                                                       entry['Bezeichnung'],
+                                                       entry['Menge'],
+                                                       app.units_dict[entry['MatNr']],
+                                                       date
+                                                       ))
 
 
 def show_outgoing_material(app:application.App) -> None:
@@ -344,55 +324,63 @@ def show_outgoing_material(app:application.App) -> None:
     enabled = [app.sm_entry, app.matnr_entry]
     disabled = [app.posnr_entry, app.bestellt_label, app.bestellt_button, app.delete_button, app.print_button, app.combobox_loeschen]
     set_widget_status(enabled, disabled)
-    if str(app.matnr_entry.focus_get()) != '.!frame3.!entry3': # .!frame3.!entry3 ist der Name vom SM_ENTRY Widget
-        app.matnr_entry.focus()
+    unbind_all_widgets(app)
+    
     app.sm_entry.bind('<Return>', lambda _ : show_outgoing_material(app))
     app.sm_entry.bind('<KeyRelease>', lambda _ : show_outgoing_material(app))
-    app.posnr_entry.unbind('<Return>')
-    app.posnr_entry.unbind('<KeyRelease>')
     app.matnr_entry.bind('<Return>', lambda _ : show_outgoing_material(app))
     app.matnr_entry.bind('<KeyRelease>', lambda _ : show_outgoing_material(app))
-    app.combobox_loeschen.unbind('<<ComboboxSelected>>')
-
+    
+    if str(app.matnr_entry.focus_get()) != '.!frame3.!entry2': # .!frame3.!entry2 ist der Name vom SM_ENTRY Widget (2.entry im 3. frame)
+        app.matnr_entry.focus()
+    
     cursor:sqlite3.Cursor = app.cursor
     matnr = app.matnr_entry.get()
     smnr = app.sm_entry.get()
-    cursor.execute("SELECT * FROM Warenausgang WHERE MatNr LIKE ? AND SM_Nummer LIKE ? AND PosTyp = 9", (f'%{matnr}%', f'%{smnr}%',))
-    selection = cursor.fetchall()
-    output = ''
-    headline = (f"{'Nr.'.rjust(5)}\t{'SM Nummer'.ljust(10)}\t{'Pos'.ljust(3)}\t{'Typ'.ljust(3)}  {'MatNr'.ljust(8)}\
-\t\t{'Bezeichnung'.ljust(50)}\t{'SD Beleg'.ljust(10)}\t{'Bedarfsmenge'.ljust(12)}\
-\t\t{'Warenausgangsmenge'.ljust(18)}\t{'Umbuchungsmenge'.ljust(15)}\t{'Lieferschein'.ljust(12)}\t{'Materialbeleg'.ljust(13)}\n")
-    #output = headline if selection else 'Keine Daten gefunden. Bitte Filter überprüfen.'
-    start = 1
-    if selection:
-        output += headline
-        for number, row in enumerate(selection, start = start):
-            #print(f"{row['SM_Nummer']}\t{row['Warenausgangsmenge']}")
-            text = (f"{str(number).rjust(5)}\t{row['SM_Nummer'].ljust(10)}\t{row['Position'].ljust(3)}\t{str(row['PosTyp']).ljust(3)}  {str(row['MatNr']).ljust(8)}\
-    \t\t{row['Bezeichnung'].ljust(50)}\t{row['SD_Beleg'][:10].ljust(10)}\t{str(row['Bedarfsmenge']).center(12)}\
-    \t\t{str(row['Warenausgangsmenge']).center(18)}\t{str(row['Umbuchungsmenge']).center(15)}\t{row['Lieferschein'][:10].ljust(12)}\t{row['Materialbeleg'][:10].ljust(13)}\n")
-            output += text
-        start = number+1
+    selection_with_sm = cursor.execute("SELECT * FROM Warenausgang WHERE MatNr LIKE ? AND SM_Nummer LIKE ? AND PosTyp = 9", (f'%{matnr}%', f'%{smnr}%',)).fetchall()
+    selection_without_sm = cursor.execute("SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE MatNr LIKE ?", (f'%{matnr}%',)).fetchall()
 
-    selection_kleinst = ''
-    if not app.sm_entry.get():
-        unit_query = "SELECT * FROM Kleinstmaterial"
-        cursor.execute(unit_query)
-        units = cursor.fetchall()
-        units_dict = {unit['MatNr']: unit['Einheit'] for unit in units}
-        cursor.execute("SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE MatNr LIKE ?", (f'%{matnr}%',))
-        selection_kleinst = cursor.fetchall()
-        if selection_kleinst:
-            output += '\nAusgabe Kleinstmaterial ohne SM Bezug\n'
-            output += (f"{'Nr.'.rjust(5)}\t{'MatNr'.ljust(8)}\t{'Bezeichnung'.ljust(50)}\t{'Menge'.ljust(5)}\t{'Einheit'.ljust(7)}\n")
-            for number,row in enumerate(selection_kleinst, start = start):
-                output += (f"{str(number).rjust(5)}\t{str(row['Matnr']).ljust(8)}\t{row['Bezeichnung'].ljust(50)}\t{str(row['Menge']).center(5)}\t{units_dict[row['MatNr']].center(6)}\n")
-    if not selection and not selection_kleinst:
-        output += 'Keine Daten gefunden. Bitte Filter überprüfen.'
-    app.output_box.delete(1.0, 'end')
-    app.output_box.insert(1.0, output)
-    # app.output_box.tag_configure('headline - bold', )
+    for item in app.output_listbox.get_children():
+        app.output_listbox.delete(item)
+    
+    columns = ['Nr.', 'SM Nummer / ID', 'Position', 'Pos.Typ', 'MatNr.', 'Bezeichnung', 'Menge', 'Einheit', 'Lieferschein', 'SD Beleg',  'Materialbeleg', 'LAST_COLUMN']
+    app.output_listbox.configure(columns = columns)
+    for column in columns:
+        if column == 'LAST_COLUMN':
+            continue
+        width, anchor = app.columns_dict[column]
+        app.output_listbox.heading(column, text = column)
+        app.output_listbox.column(column, width = width, anchor = anchor, stretch = tk.NO)
+    app.output_listbox.column('#0', width = 250, stretch = tk.NO) #erste Spalte fixieren (dort, wo das Parent erscheint)
+    
+    if selection_with_sm:
+        tree_with_sm = app.output_listbox.insert('', 'end', text = 'Warenausgang mit SM Bezug', open = True)
+        for number, entry in enumerate(selection_with_sm, start = 1):
+            app.output_listbox.insert(tree_with_sm, "end", values = (number,
+                                                                    entry['SM_Nummer'],
+                                                                    entry['Position'],
+                                                                    entry['PosTyp'],
+                                                                    entry['MatNr'],
+                                                                    entry['Bezeichnung'],                                                                
+                                                                    entry['Bedarfsmenge'],
+                                                                    app.units_dict[entry['MatNr']],
+                                                                    entry['Lieferschein'][:-2],
+                                                                    entry['SD_Beleg'][:-2],
+                                                                    entry['Materialbeleg'][:-2]
+                                                                    ))
+    if selection_without_sm:
+        tree_without_sm = app.output_listbox.insert('', 'end', text = 'Warenausgang ohne SM Bezug', open = True)
+        for number, entry in enumerate(selection_without_sm, start = len(selection_with_sm)+1):
+            app.output_listbox.insert(tree_without_sm, "end", values = (number,
+                                                                    entry['ID'],
+                                                                    '',
+                                                                    '',
+                                                                    entry['MatNr'],
+                                                                    entry['Bezeichnung'],
+                                                                    entry['Menge'],
+                                                                    app.units_dict[entry['MatNr']]
+                                                                    ))
+
 
 
 def show_material_for_order(app:application.App) -> None:
@@ -403,72 +391,55 @@ def show_material_for_order(app:application.App) -> None:
     enabled = [app.sm_entry, app.print_button]
     disabled = [app.posnr_entry, app.matnr_entry, app.bestellt_label, app.bestellt_button, app.delete_button, app.combobox_loeschen]
     set_widget_status(enabled, disabled)
-    
-    app.sm_entry.focus()
+    unbind_all_widgets(app)
     app.sm_entry.bind('<Return>', lambda _ : show_material_for_order(app))
     app.sm_entry.bind('<KeyRelease>', lambda _ : show_material_for_order(app))
-    app.posnr_entry.unbind('<Return>')
-    app.posnr_entry.unbind('<KeyRelease>')
-    app.matnr_entry.unbind('<Return>')
-    app.matnr_entry.unbind('<KeyRelease>')
-    app.combobox_loeschen.unbind('<<ComboboxSelected>>')
+    app.sm_entry.focus()
 
     cursor:sqlite3.Cursor = app.cursor
     smnr = app.sm_entry.get()
-    cursor.execute("SELECT * FROM Warenausgabe_Comline WHERE SM_Nummer LIKE ?", (f'%{smnr}%',))
-    selection = cursor.fetchall()
-    cursor.execute("SELECT * FROM Standardmaterial")
-    standard = cursor.fetchall()
-    cursor.execute("SELECT * FROM Kleinstmaterial")
-    kleinst = cursor.fetchall()
-    standard_dict = {row['MatNr']:row['Einheit'] for row in standard}
-    kleinst_dict= {row['MatNr']:row['Einheit'] for row in kleinst}
-
+    selection = cursor.execute("SELECT * FROM Warenausgabe_Comline WHERE SM_Nummer LIKE ?", (f'%{smnr}%',)).fetchall()
+   
     standard_material = []
-    kleinst_material = []
+    small_material = []
     telekom_material = []
     for row in selection:
-        if row['MatNr'] in standard_dict:
-            standard_material.append(row)
-        elif row['MatNr'] in kleinst_dict:
-            kleinst_material.append(row)
+        values = (row['SM_Nummer'], row['MatNr'], row['Bezeichnung'], row['Bedarfsmenge'], app.units_dict[row['MatNr']] or 'n/a')
+        if row['MatNr'] in app.standard_materials:
+            standard_material.append(values)
+        elif row['MatNr'] in app.small_materials:
+            small_material.append(values)
         else:
-            telekom_material.append(row)
+            telekom_material.append(values)
 
+    for item in app.output_listbox.get_children():
+        app.output_listbox.delete(item)
+    
+    columns = ['SM Nummer', 'MatNr.', 'Bezeichnung', 'Menge', 'Einheit', 'LAST_COLUMN']
+    app.output_listbox.configure(columns = columns)
+    for column in columns:
+        if column == 'LAST_COLUMN':
+            continue
+        width, anchor = app.columns_dict[column]
+        app.output_listbox.heading(column, text = column)
+        app.output_listbox.column(column, width = width, anchor = anchor, stretch = tk.NO)
+    app.output_listbox.column('#0', width = 250, stretch = tk.NO) #erste Spalte fixieren (dort, wo das Parent erscheint)
+    
     if not selection:
-        app.output_box.delete(1.0, 'end')
-        app.output_box.insert(1.0, 'Keine Daten gefunden. Bitte Filter überprüfen.')
+        app.output_listbox.insert('','end', values = ('','','Keine Daten gefunden. Bitte Filter prüfen.'))
         return
-
-    headline = (f"{'SM Nummer'.ljust(10)}\t{'MatNr'.ljust(8)}\t{'Bezeichnung'.ljust(45)}\t{'Menge'.ljust(5)}\t{'Einheit'}\n")
-    
     if standard_material:
-        output_text = '\n Standardmaterial\n'
-        output_text += headline
-    else:
-        output_text = ''
-    for row in standard_material:
-        einheit = standard_dict.get(row['MatNr'], None) or kleinst_dict.get(row['MatNr'], 'n/a')
-        text = (f"{row['SM_Nummer'].ljust(10)}\t{str(row['MatNr']).ljust(8)}\t{row['Bezeichnung'].ljust(45)}\t{str(row['Bedarfsmenge']).center(5)}\t{einheit.center(6)}\n")
-        output_text += text
-    if kleinst_material:
-        output_text += '\n Kleinstmaterial\n'  
-        output_text += headline
-    
-    for row in kleinst_material:
-        einheit = standard_dict.get(row['MatNr'], None) or kleinst_dict.get(row['MatNr'], 'n/a')
-        text = (f"{row['SM_Nummer'].ljust(10)}\t{str(row['MatNr']).ljust(8)}\t{row['Bezeichnung'].ljust(45)}\t{str(row['Bedarfsmenge']).center(5)}\t{einheit.center(6)}\n")
-        output_text += text
+        tree_standard = app.output_listbox.insert('', 'end', text = 'Standardmaterial', open = True)
+        for entry in standard_material:
+            app.output_listbox.insert(tree_standard, "end", values = entry)
+    if small_material:
+        tree_small_material = app.output_listbox.insert('', 'end', text = 'Kleinstmaterial', open = True)
+        for entry in small_material:
+            app.output_listbox.insert(tree_small_material, "end", values = entry)    
     if telekom_material:
-        output_text  += '\n Telekom Material (per SM Nummer bestellt)\n'
-        output_text += headline
-    for row in telekom_material:
-        einheit = standard_dict.get(row['MatNr'], None) or kleinst_dict.get(row['MatNr'], 'n/a')
-        text = (f"{row['SM_Nummer'].ljust(10)}\t{str(row['MatNr']).ljust(8)}\t{row['Bezeichnung'].ljust(45)}\t{str(row['Bedarfsmenge']).center(5)}\t{einheit.center(6)}\n")
-        output_text += text
-    
-    app.output_box.delete(1.0, 'end')
-    app.output_box.insert(1.0, output_text)
+        tree_small_material = app.output_listbox.insert('', 'end', text = 'Telekommaterial', open = True)
+        for entry in telekom_material:
+            app.output_listbox.insert(tree_small_material, "end", values = entry)  
 
 
 def print_screen(app:application.App) -> None:
@@ -481,8 +452,23 @@ def print_screen(app:application.App) -> None:
         return
     answer = ctypes.windll.user32.MessageBoxW(0,"Soll der angezeigte Inhalt gedruckt werden?", "Drucken...", 68)
     if answer == 6:
-        selection = app.output_box.get(1.0, 'end')
-        wb = xl.Workbook()
+        standard_material = []
+        small_material = []
+        telekom_material = []
+        parents = app.output_listbox.get_children()
+        for parent in parents:
+            children = app.output_listbox.get_children(parent)
+            for child in children:
+                values = app.output_listbox.item(child)['values']
+                values = [str(x) for x in values]
+                output = '\t'.join(values)
+                if app.output_listbox.item(parent)['text'] == 'Standardmaterial':
+                    standard_material.append(output)
+                elif app.output_listbox.item(parent)['text'] == 'Kleinstmaterial':
+                    small_material.append(output)
+                else:
+                    telekom_material.append(output)
+        wb:xl.Workbook = xl.Workbook()
         sheet = wb.active
         sheet.page_setup.orientation = 'landscape'
         sheet.page_setup.fitToPage = True
@@ -497,12 +483,31 @@ def print_screen(app:application.App) -> None:
                 sheet.column_dimensions[xl.utils.cell.get_column_letter(x)].width = 1
             else:
                 sheet.column_dimensions[xl.utils.cell.get_column_letter(x)].width = 3
-        rows = selection.split('\n')
-        for row, line in enumerate(rows, start = 1):
-            for col, word in enumerate(line.split('\t'), start = 1):
-                sheet.cell(column =col, row = row, value = word)
+        start = 1
+        if standard_material:
+            sheet.cell(column = 1, row = 1,value = 'Standardmaterial')
+            start +=1
+            for row, line in enumerate(standard_material, start = start):
+                for col, word in enumerate(line.split('\t'), start = 1):
+                    sheet.cell(column = col, row = row, value = word)
+            start += len(standard_material) + 1
+        if small_material:
+            sheet.cell(column = 1, row = start, value = 'Kleinstmaterial')
+            start +=1
+            for row, line in enumerate(small_material, start = start):
+                for col, word in enumerate(line.split('\t'), start = 1):
+                    sheet.cell(column =col, row = row, value = word)
+            start += len(small_material) + 1
+        if telekom_material:
+            sheet.cell(column = 1, row = start, value = 'Telekommaterial')
+            start +=1
+            for row, line in enumerate(telekom_material, start = start):
+                for col, word in enumerate(line.split('\t'), start = 1):
+                    sheet.cell(column =col, row = row, value = word)
         border = xl.styles.Side(border_style = 'thin', color = '000000')
         for idx, row in enumerate(sheet, start = 1):
+            if not row[0].value:
+                continue
             try:
                 _ = int(row[0].value)
                 # draw cell bottom lines
@@ -519,8 +524,7 @@ def print_screen(app:application.App) -> None:
                 for col in range(amount):
                     if col % 2 == 0:
                         continue
-                    sheet.cell(row = idx, column = col+7).border = xl.styles.Border(bottom = border, top = border, left = border, right = border)
-                
+                    sheet.cell(row = idx, column = col+7).border = xl.styles.Border(bottom = border, top = border, left = border, right = border)   
             except ValueError:
                 continue
         
@@ -530,8 +534,6 @@ def print_screen(app:application.App) -> None:
             excel_app.Visible = False
             wb = excel_app.Workbooks.Open(file_path)
             wb.PrintOut()
-            #ws = wb.Worksheets[1]
-            #ws.PrintOut()
         finally:
             wb.Close(False)
             excel_app.Quit()
@@ -761,7 +763,7 @@ def filter_entries_to_delete(app:application.App) -> None:
     sm = app.sm_entry.get()
     posnr = app.posnr_entry.get()
     matnr = app.matnr_entry.get()
-
+    table = app.combobox_loeschen.get()
     execution_string = app.execution_dict[app.combobox_loeschen.get()][0]
     execute_values = app.execution_dict[app.combobox_loeschen.get()][1]
     execute_values = execute_values.replace('matnr', matnr).replace('sm', sm).replace('posnr', posnr)
@@ -770,30 +772,70 @@ def filter_entries_to_delete(app:application.App) -> None:
     if not execution_tuple:
         execution_tuple = ('',)    
 
-    cursor.execute(execution_string, (execution_tuple))
-    app.execution_string = execution_string
-    app.execution_tuple = execution_tuple
-    selection = cursor.fetchall()
-    output = ''
+    # app.execution_string = execution_string
+    # app.execution_tuple = execution_tuple
+    
+    for item in app.output_listbox.get_children():
+        app.output_listbox.delete(item)
+    columns_info = cursor.execute(f"PRAGMA table_info ({table})").fetchall()
+    columns = [info[1] for info in columns_info]
+    columns.append('LAST_COLUMN')
+    app.output_listbox.configure(columns = columns)
+    for column in columns:
+        if column == 'LAST_COLUMN':
+            continue
+        width, anchor = app.columns_dict[column]
+        app.output_listbox.heading(column, text = column)
+        app.output_listbox.column(column, width = width, anchor = anchor, stretch = tk.NO)
+    app.output_listbox.column('#0', width = 250, stretch = tk.NO) #erste Spalte fixieren (dort, wo das Parent erscheint)
+    
+    selection = cursor.execute(execution_string, (execution_tuple)).fetchall()
     for row in selection:
-        for field in row:
-            output += f"{field}\t"
-        output += '\n'
-    app.output_box.delete(1.0, 'end')
-    app.output_box.insert(1.0, output)
+        values = [x for x in row]
+        app.output_listbox.insert('', 'end', values = values)
 
 
 def delete_selected_entries(app:application.App) -> None:
+    selections =  app.output_listbox.selection()
+    if not selections:
+        ctypes.windll.user32.MessageBoxW(0,
+                                         "Es sind keine Einträge markiert.\nNur markierte Einträge werden gelöscht.", 
+                                         "Markier was..", 
+                                         64)
+        return
     answer = ctypes.windll.user32.MessageBoxW(0,
-                                              "Achtung!!\nAlle im Fenster angezeigten Einträge werden unwiderruflich gelöscht.\nBist du sicher, dass du die Einträge löschen willst?", 
+                                              "Achtung!!\nDie markierten Einträge werden unwiderruflich gelöscht.\nBist du sicher, dass du die Einträge löschen willst?", 
                                               "Einträge löschen", 
                                               68)
     if answer != 6:
         return
-    execution_string = app.execution_string.replace('SELECT *', 'DELETE')
-    execution_tuple = app.execution_tuple
-    app.connection.execute(execution_string, (execution_tuple))
-    app.connection.commit()
+    
+    for selection in selections:
+        values = app.output_listbox.item(selection, 'values')
+        if not values:
+            continue
+        matnr = app.output_listbox.set(selection, column = 'MatNr')
+        try:
+            sm = app.output_listbox.set(selection, column = 'SM_Nummer')
+        except tk.TclError:
+            sm = ''
+        try:
+            posnr = app.output_listbox.set(selection, column = 'ID')
+        except tk.TclError:
+            try:
+                posnr = app.output_listbox.set(selection, column = 'Position')
+            except tk.TclError:
+                posnr = ''
+
+        execution_string = app.deletion_dict[app.combobox_loeschen.get()][0]
+        execute_values = app.deletion_dict[app.combobox_loeschen.get()][1]
+        execute_values = execute_values.replace('matnr', matnr).replace('sm', sm).replace('posnr', posnr)
+        execution_tuple = tuple(execute_values.split(','))
+        execution_tuple = tuple([entry for entry in execution_tuple if entry])
+        if not execution_tuple:
+            execution_tuple = ('',)    
+        app.connection.execute(execution_string, (execution_tuple))
+        app.connection.commit()
     filter_entries_to_delete(app)
 
    
