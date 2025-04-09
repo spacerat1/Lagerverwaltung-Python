@@ -2,6 +2,7 @@ import sqlite3
 import tkinter as tk
 import tkinter.ttk as ttk
 import functions as fc
+from collections import defaultdict
 
 
 ADMIN = 'admin'
@@ -13,14 +14,7 @@ class App:
     '''
     This class creates the front-end for a warehouse management sqlite3 database.
 
-    args:
-        - connection: sqlite3.Connection to the database
-        - cursor: sqlite3.Cursor
-        - user: user privileges (STANDARD, EXPERT. ADMIN)
-        - path_to_db: where the sqlite3 database is located
-
-    Meaning of buttons and filter in this app:
-    <top_buttons>
+    top_buttons:
         - STANDARD (all users)- 
         Pfad ändern: changes the path to the underlying sqlite3 database
         Kritisches Material anzeigen: shows material, that is below a certain threshhold
@@ -35,12 +29,12 @@ class App:
         - ADMIN - 
         Einträge aus Datenbank löschen: select entries you want to delete from the underlying sqlite3 database
         Combobox: choose from which underlying table you want to delete entries
-    <filters>
+    filters:
         - dependent on which button was pressed, the filters are active / inactive -
         Materialnummer: material number
         SM Nummer: work order
         Position / ID: position or ID in the underlying sqlite3 database table
-    <bottom_buttons>
+    bottom_buttons:
         - STANDARD - 
         Drucken: only available after 'Material für SM Auftrag anzeigen' button was pressed
                 * exports the shown text into an Excel file, formats it and prints it on the standard printer
@@ -67,6 +61,7 @@ class App:
         self._init_app()
 
     def _init_app(self) -> None:
+        # create the styles and widgets
         self.style:ttk.Style = self._create_styles()
         self.top_frame:ttk.Frame = self._get_top_frame()
         self.button_frame:ttk.Frame = self._get_button_frame()
@@ -77,6 +72,58 @@ class App:
         self.button_frame.pack(side = tk.TOP, fill = 'x')
         self.filter_frame.pack(side = tk.TOP, fill = 'x')
         self.bottom_frame.pack(side = tk.BOTTOM, expand = True, fill = 'both')
+        # create some standard dicts
+        self._create_standard_values()
+        
+        # start the app with the show critical material option
+        self.disabled_button = self.button_krit_mat
+        fc.show_critical_material(self)
+    
+    def _create_standard_values(self) -> None:
+        self.threshhold_dict = defaultdict(int) 
+        self.recommended_amount_dict = defaultdict(int) 
+        self.materialnames_dict = defaultdict(str)
+        self.units_dict = defaultdict(str)
+        materials = self.cursor.execute("SELECT * FROM Standardmaterial UNION SELECT * FROM Kleinstmaterial").fetchall()
+        for row in materials:
+            self.threshhold_dict[row['MatNr']] = row['Grenzwert']
+            self.recommended_amount_dict[row['MatNr']] = row['Auffüllen']
+            self.materialnames_dict[row['MatNr']] = row['Bezeichnung']
+            self.units_dict[row['MatNr']] = row['Einheit']
+        standard_materials = self.cursor.execute("SELECT * FROM Standardmaterial").fetchall()
+        self.standard_materials = [material['MatNr'] for material in standard_materials]
+        small_materials = self.cursor.execute("SELECT * FROM Kleinstmaterial").fetchall()
+        self.small_materials = [material['MatNr'] for material in small_materials]
+        
+      
+        self.columns_dict = {'Auffüllen': (80, 'center'),
+                             'Bedarfsmenge': (90, 'center'),
+                             'Bestand': (80, 'e'),
+                             'bestellt': (80,'center'),
+                             'Bezeichnung': (400, 'w'),
+                             'Datum': (200, 'center'),
+                             'Einheit': (50, 'w'),
+                             'empfohlene Menge': (120, 'center'),
+                             'Grenzwert': (80, 'center'),
+                             'ID':(80,'e'),
+                             'LAST_COLUMN':(50,'center'),
+                             'Lieferschein':(150, 'center'),
+                             'Materialbeleg': (150,'center'),
+                             'MatNr': (110,'center'),
+                             'MatNr.': (110, 'center'),
+                             'Menge':(80, 'e'),
+                             'Nr.': (80, 'e'),
+                             'Position': (80,'center'),
+                             'Pos.Typ': (60,'center'),
+                             'PosTyp': (60, 'center'),
+                             'SD Beleg': (150, 'center'),
+                             'SD_Beleg': (150,'center'),
+                             'SM Nummer': (110, 'center'),
+                             'SM_Nummer': (110, 'center'),
+                             'SM Nummer / ID': (110, 'center'),
+                             'Umbuchungsmenge': (120, 'center'),
+                             'Warenausgangsmenge': (130, 'center')
+                             }
 
         # these dicts control the output and the filter settings in ADMIN - Deletion Mode 
         # depending on the selection in the combobox
@@ -84,18 +131,25 @@ class App:
                                'Standardmaterial' : ('SELECT * FROM Standardmaterial WHERE Matnr LIKE ?', r'%matnr%,'),
                                'Warenausgabe_Comline' :('SELECT * FROM Warenausgabe_Comline WHERE SM_Nummer LIKE ? AND MatNr LIKE ?', r'%sm%,%matnr%'),
                                'Warenausgang' : ('SELECT * FROM Warenausgang WHERE SM_Nummer LIKE ? AND MatNr LIKE ?', r'%sm%,%matnr%'),
-                               'Wareneingang' : ('SELECT * FROM Wareneingang WHERE ID = ?', 'posnr,'),
-                               'Warenausgang_Kleinstmaterial_ohne_SM_Bezug':('SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE ID = ?', 'posnr,')}
+                               'Wareneingang' : ('SELECT * FROM Wareneingang WHERE ID LIKE ?', r'%posnr%,'),
+                               'Warenausgang_Kleinstmaterial_ohne_SM_Bezug':('SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE ID LIKE ?', r'%posnr%,')}
         self.filter_dict = {'Kleinstmaterial' : ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
                             'Standardmaterial' : ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
                             'Warenausgabe_Comline' : ([self.matnr_entry, self.sm_entry], [self.posnr_entry]),
                             'Warenausgang' : ([self.matnr_entry, self.sm_entry], [self.posnr_entry]),
-                            'Wareneingang' : ([self.posnr_entry], [self.sm_entry, self.matnr_entry])
+                            'Wareneingang' : ([self.posnr_entry], [self.sm_entry, self.matnr_entry]),
+                            'Warenausgang_Kleinstmaterial_ohne_SM_Bezug': ([self.posnr_entry], [self.sm_entry, self.matnr_entry])
                             }
-        # start the app with the show critical material option
-        self.disabled_button = self.button_krit_mat
-        fc.show_critical_material(self)
-    
+        
+        self.deletion_dict = { 'Kleinstmaterial' : ('DELETE FROM Kleinstmaterial WHERE MatNr = ?', 'matnr,'),
+                               'Standardmaterial' : ('DELETE FROM Standardmaterial WHERE Matnr = ?', 'matnr,'),
+                               'Warenausgabe_Comline' :('DELETE FROM Warenausgabe_Comline WHERE SM_Nummer = ? AND Position = ?', 'sm,posnr'),
+                               'Warenausgang' : ('DELETE FROM Warenausgang WHERE SM_Nummer = ? AND Position = ?', 'sm,posnr'),
+                               'Wareneingang' : ('DELETE FROM Wareneingang WHERE ID = ?', 'posnr,'),
+                               'Warenausgang_Kleinstmaterial_ohne_SM_Bezug':('DELETE FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE ID = ?', 'posnr,')}
+
+
+
 
     def _create_styles(self) -> ttk.Style:
         '''
@@ -169,9 +223,9 @@ class App:
                     highlightcolor = [('disabled', 'black')],
                     fieldbackground = [('disabled', 'black')]
                     )
+    
+        return self._configure_styles(_style)
         
-        _style = self._configure_styles(_style)
-        return _style
 
     def _configure_styles(self, _style) -> ttk.Style:
         '''
@@ -194,8 +248,9 @@ class App:
         _style.configure('Frame_filter.TFrame', borderwidth = 2, bordercolor = 'grey', background = 'black', relief = 'groove')
         _style.configure('Green.TCombobox', background = 'black', foreground = 'forest green', font = 'Verdana 10')
         _style.configure('Red.TCombobox', background = 'black', foreground = 'orange red', font = 'Verdana 10')
-        #print(self.style.layout('Frame_grey2.TFrame'))
-        #print(self.style.element_options('Frame.border'))
+        _style.configure('Green.Treeview', font = 'Verdana 11', foreground = 'forest green', background = 'black', fieldbackground = 'black')
+        #print(_style.layout('Green.Treeview'))
+        #print(_style.element_options('Treeview.field'))
         return _style
 
 
@@ -294,11 +349,13 @@ class App:
     def _get_right_button_frame(self, _main_button_frame:ttk.Frame) -> ttk.Frame:
         # ADMIN Knopf und Combobox
         _right_button_frame = ttk.Frame(_main_button_frame, style = 'Frame_grey.TFrame')
+        tables = self.cursor.execute("SELECT name FROM sqlite_master WHERE type ='table';").fetchall()
+        values = [table[0] for table in tables if table[0] != 'sqlite_sequence']
         self.combobox_loeschen = ttk.Combobox(_right_button_frame, 
                                                 style = 'Red.TCombobox',
                                                 width = 50, 
-                                                values = ['Kleinstmaterial', 'Standardmaterial', 'Warenausgabe_Comline',
-                                                        'Warenausgang', 'Wareneingang'])
+                                                values = values
+                                                )
         self.combobox_loeschen.current(0)
         self.button_loeschen = ttk.Button(_right_button_frame, 
                                             style = 'Red.TButton', 
@@ -404,27 +461,29 @@ class App:
             
         self.entry_frame.pack(side = tk.BOTTOM, fill = 'x')
         
-        #creates a textbox that fills the rest of the bottom fame
-        self.vertical_scrollbar = ttk.Scrollbar(_bottom_frame, orient = tk.VERTICAL)
-        self.horizontal_scrollbar = ttk.Scrollbar(_bottom_frame, orient = tk.HORIZONTAL)
-        self.output_box = tk.Text(_bottom_frame, 
-                                  font = ('Courier', 11),
-                                  wrap = 'none',
-                                  foreground = 'white', 
-                                  background = 'grey10', 
-                                  yscrollcommand = self.vertical_scrollbar.set, 
-                                  xscrollcommand = self.horizontal_scrollbar.set
-                                  )
+        # create the output window using a treeview widget
+        self.output_listbox = ttk.Treeview(_bottom_frame, 
+                                           style = 'Green.Treeview',
+                                           show='tree headings', 
+                                           selectmode='extended'
+                                           )
         
-        self.vertical_scrollbar.config(command = self.output_box.yview)
+        self.vertical_scrollbar = ttk.Scrollbar(_bottom_frame, orient = tk.VERTICAL, command = self.output_listbox.yview)
+        self.horizontal_scrollbar = ttk.Scrollbar(_bottom_frame, orient = tk.HORIZONTAL, command = self.output_listbox.xview)
         self.vertical_scrollbar.pack(side = tk.RIGHT,  fill = 'y')
-        
-        self.horizontal_scrollbar.config(command = self.output_box.xview)
         self.horizontal_scrollbar.pack(side = tk.BOTTOM,  fill = 'x')
-        
-        self.output_box.pack(side = tk.LEFT,  expand = True, fill = 'both')
+
+        self.output_listbox.configure(yscrollcommand = self.vertical_scrollbar.set,
+                                      xscrollcommand = self.horizontal_scrollbar.set)
+        self.output_listbox.pack(side = tk.LEFT,  expand = True, fill = 'both')
+        self.output_listbox.bind("<MouseWheel>", self.on_treeview_scroll)
         return _bottom_frame
-  
+    
+    def on_treeview_scroll(self, event):
+        # increases the vertical scrollspeed, because the standard speed is awfully slow :)
+        scroll_speed = 10  # Multiplicator
+        self.output_listbox.yview_scroll(int(-1*(event.delta/120)*scroll_speed), "units")
+
 
     def open_booking_window(self, title, selection):
         '''
@@ -564,4 +623,5 @@ class AutocompleteCombobox(tk.ttk.Combobox):
                         self.autocomplete()
                 # No need for up/down, we'll jump to the popup
                 # list at the position of the autocompletion
-        
+
+
