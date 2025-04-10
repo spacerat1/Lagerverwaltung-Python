@@ -140,15 +140,18 @@ def show_critical_material(app:application.App) -> None:
         app.output_listbox.heading(column, text = column)
         app.output_listbox.column(column, width = width, anchor = anchor, stretch = tk.NO)
     
+    
     app.output_listbox.column('#0', width = 200, stretch = tk.NO) #erste Spalte fixieren (dort, wo das Parent erscheint)
     if standard_material_output:
-        tree_standard = app.output_listbox.insert('', 'end', text = 'Standardmaterial', open = True)
+        tree_standard = app.output_listbox.insert('', 'end', text = 'Standardmaterial', open = True, tags = ('green',))
         for entry in standard_material_output:
             app.output_listbox.insert(tree_standard, "end", values = entry)
     if small_material_output:
-        tree_small_material = app.output_listbox.insert('', 'end', text = 'Kleinstmaterial', open = True)
+        tree_small_material = app.output_listbox.insert('', 'end', text = 'Kleinstmaterial', open = True, tags = ('green',))
         for entry in small_material_output:
             app.output_listbox.insert(tree_small_material, "end", values = entry)
+    if  not standard_material_output and not small_material_output:
+        app.output_listbox.insert('', 'end', values = ('', 'Sieht gut aus, wir haben alles. :)'))
     
 
 def toggle_ordered_status(app:application.App) -> None:
@@ -252,7 +255,7 @@ def show_stock(app: application.App) -> None:
         einheit = app.units_dict[matnr]
         if matnr in app.standard_materials:
             standardmaterial_list.append((matnr, bezeichnung, bestand, einheit))
-        else:
+        elif matnr in app.small_materials:
             small_material_list.append((matnr, bezeichnung, bestand, einheit))
     
     for item in app.output_listbox.get_children():
@@ -266,14 +269,17 @@ def show_stock(app: application.App) -> None:
         app.output_listbox.heading(column, text = column)
         app.output_listbox.column(column, width = width, anchor = anchor, stretch = tk.NO)
     app.output_listbox.column('#0', width = 200, stretch = tk.NO) #erste Spalte fixieren (dort, wo das Parent erscheint)
+    if standardmaterial_list:
+        tree_standard = app.output_listbox.insert('', 'end', text = 'Standardmaterial', open = True, tags = ('green',))
+        for entry in standardmaterial_list:
+            app.output_listbox.insert(tree_standard, "end", values = entry)
+    if small_material_list:
+        tree_small_material = app.output_listbox.insert('', 'end', text = 'Kleinstmaterial', open = True, tags = ('green',))
+        for entry in small_material_list:
+            app.output_listbox.insert(tree_small_material, "end", values = entry)
     
-    tree_standard = app.output_listbox.insert('', 'end', text = 'Standardmaterial', open = True)
-    for entry in standardmaterial_list:
-        app.output_listbox.insert(tree_standard, "end", values = entry)
-    
-    tree_small_material = app.output_listbox.insert('', 'end', text = 'Kleinstmaterial', open = True)
-    for entry in small_material_list:
-        app.output_listbox.insert(tree_small_material, "end", values = entry)
+    if not standardmaterial_list and not small_material_list:
+        app.output_listbox.insert('','end', values = ('','Keine Daten gefunden. Bitte Filter prüfen'))
     
      
 def show_ingoing_material(app:application.App) -> None:
@@ -314,6 +320,8 @@ def show_ingoing_material(app:application.App) -> None:
                                                        app.units_dict[entry['MatNr']],
                                                        date
                                                        ))
+    if not selection:
+        app.output_listbox.insert('', 'end', values = ('','','Keine Daten gefunden. Bitte Filter prüfen.'))
 
 
 def show_outgoing_material(app:application.App) -> None:
@@ -351,10 +359,10 @@ def show_outgoing_material(app:application.App) -> None:
         width, anchor = app.columns_dict[column]
         app.output_listbox.heading(column, text = column)
         app.output_listbox.column(column, width = width, anchor = anchor, stretch = tk.NO)
-    app.output_listbox.column('#0', width = 250, stretch = tk.NO) #erste Spalte fixieren (dort, wo das Parent erscheint)
+    app.output_listbox.column('#0', width = 280, stretch = tk.NO) #erste Spalte fixieren (dort, wo das Parent erscheint)
     
     if selection_with_sm:
-        tree_with_sm = app.output_listbox.insert('', 'end', text = 'Warenausgang mit SM Bezug', open = True)
+        tree_with_sm = app.output_listbox.insert('', 'end', text = 'Warenausgang mit SM Bezug', open = True, tags = ('green',))
         for number, entry in enumerate(selection_with_sm, start = 1):
             app.output_listbox.insert(tree_with_sm, "end", values = (number,
                                                                     entry['SM_Nummer'],
@@ -369,7 +377,7 @@ def show_outgoing_material(app:application.App) -> None:
                                                                     entry['Materialbeleg'][:-2]
                                                                     ))
     if selection_without_sm:
-        tree_without_sm = app.output_listbox.insert('', 'end', text = 'Warenausgang ohne SM Bezug', open = True)
+        tree_without_sm = app.output_listbox.insert('', 'end', text = 'Warenausgang ohne SM Bezug', open = True, tags = ('green',))
         for number, entry in enumerate(selection_without_sm, start = len(selection_with_sm)+1):
             app.output_listbox.insert(tree_without_sm, "end", values = (number,
                                                                     entry['ID'],
@@ -380,7 +388,8 @@ def show_outgoing_material(app:application.App) -> None:
                                                                     entry['Menge'],
                                                                     app.units_dict[entry['MatNr']]
                                                                     ))
-
+    if not selection_with_sm and not selection_without_sm:
+        app.output_listbox.insert('','end', values = ('','','','','','Keine Daten gefunden. Bitte Filter prüfen'))
 
 
 def show_material_for_order(app:application.App) -> None:
@@ -429,15 +438,15 @@ def show_material_for_order(app:application.App) -> None:
         app.output_listbox.insert('','end', values = ('','','Keine Daten gefunden. Bitte Filter prüfen.'))
         return
     if standard_material:
-        tree_standard = app.output_listbox.insert('', 'end', text = 'Standardmaterial', open = True)
+        tree_standard = app.output_listbox.insert('', 'end', text = 'Standardmaterial', open = True, tags = ('green',))
         for entry in standard_material:
             app.output_listbox.insert(tree_standard, "end", values = entry)
     if small_material:
-        tree_small_material = app.output_listbox.insert('', 'end', text = 'Kleinstmaterial', open = True)
+        tree_small_material = app.output_listbox.insert('', 'end', text = 'Kleinstmaterial', open = True, tags = ('green',))
         for entry in small_material:
             app.output_listbox.insert(tree_small_material, "end", values = entry)    
     if telekom_material:
-        tree_small_material = app.output_listbox.insert('', 'end', text = 'Telekommaterial', open = True)
+        tree_small_material = app.output_listbox.insert('', 'end', text = 'Telekommaterial', open = True, tags = ('green',))
         for entry in telekom_material:
             app.output_listbox.insert(tree_small_material, "end", values = entry)  
 
