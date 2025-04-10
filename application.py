@@ -4,7 +4,6 @@ import tkinter.ttk as ttk
 import functions as fc
 from collections import defaultdict
 
-
 ADMIN = 'admin'
 EXPERT = 'expert'
 STANDARD = 'standard'
@@ -80,6 +79,9 @@ class App:
         fc.show_critical_material(self)
     
     def _create_standard_values(self) -> None:
+        # tag for the parents in the Treeview widget
+        self.output_listbox.tag_configure('green', background='forest green', foreground = 'white', font = 'Verdana 11 bold')
+        # some useful dicts
         self.threshhold_dict = defaultdict(int) 
         self.recommended_amount_dict = defaultdict(int) 
         self.materialnames_dict = defaultdict(str)
@@ -97,13 +99,13 @@ class App:
         
       
         self.columns_dict = {'Auffüllen': (80, 'center'),
-                             'Bedarfsmenge': (90, 'center'),
+                             'Bedarfsmenge': (110, 'center'),
                              'Bestand': (80, 'e'),
                              'bestellt': (80,'center'),
                              'Bezeichnung': (400, 'w'),
                              'Datum': (200, 'center'),
-                             'Einheit': (50, 'w'),
-                             'empfohlene Menge': (120, 'center'),
+                             'Einheit': (60, 'w'),
+                             'empfohlene Menge': (130, 'center'),
                              'Grenzwert': (80, 'center'),
                              'ID':(80,'e'),
                              'LAST_COLUMN':(50,'center'),
@@ -120,9 +122,9 @@ class App:
                              'SD_Beleg': (150,'center'),
                              'SM Nummer': (110, 'center'),
                              'SM_Nummer': (110, 'center'),
-                             'SM Nummer / ID': (110, 'center'),
-                             'Umbuchungsmenge': (120, 'center'),
-                             'Warenausgangsmenge': (130, 'center')
+                             'SM Nummer / ID': (120, 'center'),
+                             'Umbuchungsmenge': (140, 'center'),
+                             'Warenausgangsmenge': (160, 'center')
                              }
 
         # these dicts control the output and the filter settings in ADMIN - Deletion Mode 
@@ -223,6 +225,10 @@ class App:
                     highlightcolor = [('disabled', 'black')],
                     fieldbackground = [('disabled', 'black')]
                     )
+        _style.map('Green.Treeview',
+                   background = [('selected', 'light green')],
+                   foreground = [('selected', 'black')],
+                   )
     
         return self._configure_styles(_style)
         
@@ -248,9 +254,12 @@ class App:
         _style.configure('Frame_filter.TFrame', borderwidth = 2, bordercolor = 'grey', background = 'black', relief = 'groove')
         _style.configure('Green.TCombobox', background = 'black', foreground = 'forest green', font = 'Verdana 10')
         _style.configure('Red.TCombobox', background = 'black', foreground = 'orange red', font = 'Verdana 10')
-        _style.configure('Green.Treeview', font = 'Verdana 11', foreground = 'forest green', background = 'black', fieldbackground = 'black')
-        #print(_style.layout('Green.Treeview'))
-        #print(_style.element_options('Treeview.field'))
+        _style.configure('Green.Treeview', font = 'Verdana 11', foreground = 'forest green', background = 'black', fieldbackground = 'black', bordercolor='white', borderwidth = 2)
+        _style.configure('Green.Treeview.Heading', background = 'dark green', foreground = 'white', font = 'Verdana 8 bold')
+        # print(_style.layout('Green.Treeview'))
+        # print(_style.element_options('Treeview.field'))
+        # print(_style.element_options('Treeview.padding'))
+        # print(_style.element_options('Treeview.label'))
         return _style
 
 
