@@ -92,6 +92,7 @@ def show_context_menu(event:tk.Event, app:application.App) -> None:
     app.context_menu.add_command(label = 'Kopieren: Ganze Zeile', command = lambda: copy_line(app))
     app.context_menu.post(event.x_root, event.y_root)
 
+
 def copy_matnr(app:application.App) -> None:
     mat_numbers = []
     selections =  app.output_listbox.selection()
@@ -457,7 +458,7 @@ def show_outgoing_material(app:application.App) -> None:
                                                                     entry['SD_Beleg'][:-2],
                                                                     entry['Materialbeleg'][:-2]
                                                                     ))
-    if selection_without_sm:
+    if selection_without_sm and not smnr:
         tree_without_sm = app.output_listbox.insert('', 'end', text = 'Warenausgang ohne SM Bezug', open = True, tags = ('green',))
         for number, entry in enumerate(selection_without_sm, start = len(selection_with_sm)+1):
             app.output_listbox.insert(tree_without_sm, "end", values = (number,
