@@ -55,6 +55,8 @@ class App:
         self.window.title('Lagerverwaltung Comline')
         self.window.minsize(1200,768)
         self.window.configure(bg='black')
+        self.context_menu = tk.Menu(self.window, tearoff = 0)
+        self.window.bind('<Button-3>', lambda event, app = self :fc.show_context_menu(event, app))
         self.execution_string = ''
         self.execution_tuple = ''    
         self._init_app()

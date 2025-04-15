@@ -76,6 +76,86 @@ def unbind_all_widgets(app:application.App) -> None:
     app.combobox_loeschen.unbind('<<ComboboxSelected>>')
 
 
+def show_context_menu(event:tk.Event, app:application.App) -> None:
+    #print(app.output_listbox['columns'])
+    selections =  app.output_listbox.selection()
+    if not selections:
+        return
+    app.context_menu.delete(0, 'end')
+    columns = app.output_listbox['columns']
+    if 'MatNr.' in columns:
+        app.context_menu.add_command(label = 'Kopieren: Materialnummer', command  = lambda: copy_matnr(app))
+    if 'SM Nummer / ID' in columns or 'SM Nummer' in columns:
+        app.context_menu.add_command(label = 'Kopieren: SM Nummer', command = lambda: copy_sm_nr(app))
+    if 'Bezeichnung' in columns:
+        app.context_menu.add_command(label = 'Kopieren: Bezeichnung', command = lambda: copy_name(app))
+    app.context_menu.add_command(label = 'Kopieren: Ganze Zeile', command = lambda: copy_line(app))
+    app.context_menu.post(event.x_root, event.y_root)
+
+def copy_matnr(app:application.App) -> None:
+    mat_numbers = []
+    selections =  app.output_listbox.selection()
+    for selection in selections:
+        matnr = app.output_listbox.set(selection, column = 'MatNr.')
+        if not matnr:
+            continue
+        mat_numbers.append(matnr)
+    output_string = '\n'.join(mat_numbers)
+    app.window.clipboard_clear()
+    app.window.clipboard_append(output_string)
+    app.window.update()
+
+def copy_sm_nr(app:application.App) -> None:
+    sm_numbers = []
+    if 'SM Nummer / ID' in app.output_listbox['columns']:
+        sm_column = 'SM Nummer / ID'
+    else:
+        sm_column = 'SM Nummer'
+    selections =  app.output_listbox.selection()
+    
+    for selection in selections:
+        smnr = app.output_listbox.set(selection, column = sm_column)
+        if not smnr:
+            continue
+        sm_numbers.append(smnr)
+    output_string = '\n'.join(sm_numbers)
+    app.window.clipboard_clear()
+    app.window.clipboard_append(output_string)
+    app.window.update()
+
+
+def copy_name(app:application.App) -> None:
+    names = []
+    selections =  app.output_listbox.selection()
+    for selection in selections:
+        name = app.output_listbox.set(selection, column = 'Bezeichnung')
+        if not name:
+            continue
+        names.append(name)
+    output_string = '\n'.join(names)
+    app.window.clipboard_clear()
+    app.window.clipboard_append(output_string)
+    app.window.update()
+
+def copy_line(app:application.App) -> None:
+    lines = []
+    selections =  app.output_listbox.selection()
+    for selection in selections:
+        values = app.output_listbox.item(selection, 'values')
+        if not values:
+            continue
+        lines.append(values)
+    output_list = []
+    for value in lines:
+        val_str = str(value).strip('()').replace(", '", '\t').replace("'","")
+        output_list.append(val_str)
+    output_string = '\n'.join(output_list)
+    app.window.clipboard_clear()
+    app.window.clipboard_append(output_string)
+    app.window.update()
+
+
+
 def show_critical_material(app:application.App) -> None:
     app.disabled_button.config(state = 'enabled')
     app.disabled_button = app.button_krit_mat
@@ -362,6 +442,7 @@ def show_outgoing_material(app:application.App) -> None:
     app.output_listbox.column('#0', width = 280, stretch = tk.NO) #erste Spalte fixieren (dort, wo das Parent erscheint)
     
     if selection_with_sm:
+        selection_with_sm = sorted(selection_with_sm, key = lambda x : x['SM_Nummer'])
         tree_with_sm = app.output_listbox.insert('', 'end', text = 'Warenausgang mit SM Bezug', open = True, tags = ('green',))
         for number, entry in enumerate(selection_with_sm, start = 1):
             app.output_listbox.insert(tree_with_sm, "end", values = (number,
@@ -844,7 +925,7 @@ def delete_selected_entries(app:application.App) -> None:
         if not execution_tuple:
             execution_tuple = ('',)    
         app.connection.execute(execution_string, (execution_tuple))
-        app.connection.commit()
+    app.connection.commit()
     filter_entries_to_delete(app)
 
    
