@@ -628,6 +628,8 @@ def print_screen(app:application.App) -> None:
                 _ = int(row[0].value)
                 # if no type in column 5, ignore this row
                 if not (sheet.cell(row= idx, column = 5).value):
+                    for col in range(1,4):
+                            sheet.cell(row = idx, column = col).font = xl.styles.Font(color="3282F6")
                     continue
                 # draw cell bottom lines
                 for col in range(1,6):
