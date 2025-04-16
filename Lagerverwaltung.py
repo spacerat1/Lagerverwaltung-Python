@@ -22,4 +22,4 @@ if __name__ == '__main__':
     app.window.state("zoomed")
     app.window.mainloop()
     connection.close()
-
+    #fc.read_adresses_from_workorder_list(connection, cursor)
