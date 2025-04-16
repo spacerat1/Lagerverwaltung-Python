@@ -490,7 +490,7 @@ def show_material_for_order(app:application.App) -> None:
     cursor:sqlite3.Cursor = app.cursor
     smnr = app.sm_entry.get()
     selection = cursor.execute("SELECT * FROM Warenausgabe_Comline WHERE SM_Nummer LIKE ?", (f'%{smnr}%',)).fetchall()
-   
+    selection_addresses = cursor.execute("SELECT * FROM Adresszuordnung WHERE SM_Nummer LIKE ?", (f'%{smnr}%',)).fetchall()
     standard_material = []
     small_material = []
     telekom_material = []
@@ -502,6 +502,10 @@ def show_material_for_order(app:application.App) -> None:
             small_material.append(values)
         else:
             telekom_material.append(values)
+    address_values = []
+    for row in selection_addresses:
+        values = (row['SM_Nummer'], row['VPSZ'], row['Adresse'])
+        address_values.append(values)
 
     for item in app.output_listbox.get_children():
         app.output_listbox.delete(item)
@@ -519,6 +523,11 @@ def show_material_for_order(app:application.App) -> None:
     if not selection:
         app.output_listbox.insert('','end', values = ('','','Keine Daten gefunden. Bitte Filter prüfen.'))
         return
+    if address_values:
+        tree_address = app.output_listbox.insert('', 'end', text = 'Adressen', open = True, tags = ('green',))
+        for entry in address_values:
+            app.output_listbox.insert(tree_address, "end", values = entry)
+    
     if standard_material:
         tree_standard = app.output_listbox.insert('', 'end', text = 'Standardmaterial', open = True, tags = ('green',))
         for entry in standard_material:
@@ -546,6 +555,7 @@ def print_screen(app:application.App) -> None:
         standard_material = []
         small_material = []
         telekom_material = []
+        address = []
         parents = app.output_listbox.get_children()
         for parent in parents:
             children = app.output_listbox.get_children(parent)
@@ -557,6 +567,8 @@ def print_screen(app:application.App) -> None:
                     standard_material.append(output)
                 elif app.output_listbox.item(parent)['text'] == 'Kleinstmaterial':
                     small_material.append(output)
+                elif app.output_listbox.item(parent)['text'] == 'Adressen':
+                    address.append(output)
                 else:
                     telekom_material.append(output)
         wb:xl.Workbook = xl.Workbook()
@@ -575,8 +587,18 @@ def print_screen(app:application.App) -> None:
             else:
                 sheet.column_dimensions[xl.utils.cell.get_column_letter(x)].width = 3
         start = 1
+        if address:
+            sheet.cell(column = 1, row = start,value = 'Adresse')
+            sheet.cell( column = 1, row = start).font = xl.styles.Font(size = 12, bold = True)
+            start +=1
+            for row, line in enumerate(address, start = start):
+                for col, word in enumerate(line.split('\t'), start = 1):
+                    sheet.cell(column = col, row = row, value = word)
+            start += len(address) + 1
+        
         if standard_material:
-            sheet.cell(column = 1, row = 1,value = 'Standardmaterial')
+            sheet.cell(column = 1, row = start,value = 'Standardmaterial')
+            sheet.cell( column = 1, row = start).font = xl.styles.Font(size = 12, bold = True)
             start +=1
             for row, line in enumerate(standard_material, start = start):
                 for col, word in enumerate(line.split('\t'), start = 1):
@@ -584,6 +606,7 @@ def print_screen(app:application.App) -> None:
             start += len(standard_material) + 1
         if small_material:
             sheet.cell(column = 1, row = start, value = 'Kleinstmaterial')
+            sheet.cell( column = 1, row = start).font = xl.styles.Font(size = 12, bold = True)
             start +=1
             for row, line in enumerate(small_material, start = start):
                 for col, word in enumerate(line.split('\t'), start = 1):
@@ -591,6 +614,7 @@ def print_screen(app:application.App) -> None:
             start += len(small_material) + 1
         if telekom_material:
             sheet.cell(column = 1, row = start, value = 'Telekommaterial')
+            sheet.cell( column = 1, row = start).font = xl.styles.Font(size = 12, bold = True)
             start +=1
             for row, line in enumerate(telekom_material, start = start):
                 for col, word in enumerate(line.split('\t'), start = 1):
@@ -600,14 +624,21 @@ def print_screen(app:application.App) -> None:
             if not row[0].value:
                 continue
             try:
+                # test for number in first column
                 _ = int(row[0].value)
+                # if no type in column 5, ignore this row
+                if not (sheet.cell(row= idx, column = 5).value):
+                    continue
                 # draw cell bottom lines
                 for col in range(1,6):
                     sheet.cell(row = idx, column = col).border = xl.styles.Border(bottom = border)
                 # change font color to red when amount > 1 and unit is M or n/a
-                if int(sheet.cell(row = idx, column = 4).value) > 1 and sheet.cell(row= idx, column = 5).value.strip() in ('M', 'n/a'):
-                    for col in range(1,6):
-                        sheet.cell(row = idx, column = col).font = xl.styles.Font(color="FF0000", bold = True)
+                try:
+                    if int(sheet.cell(row = idx, column = 4).value) > 1 and sheet.cell(row= idx, column = 5).value.strip() in ('M', 'n/a'):
+                        for col in range(1,6):
+                            sheet.cell(row = idx, column = col).font = xl.styles.Font(color="FF0000", bold = True)
+                except TypeError:
+                    pass
                 if sheet.cell(row= idx, column = 5).value.strip() in ('ST', 'SA'):
                     amount = int(sheet.cell(row= idx, column=4).value) * 2
                 else:
@@ -969,4 +1000,36 @@ def add_standardmaterial(connection:sqlite3.Connection, cursor:sqlite3.Cursor,  
                             (?,?,?,?,?,?)
                         ''', (matnr, bezeichnung, einheit, grenzwert, up_to, bestellt)
                         )
+    connection.commit()
+
+
+def read_adresses_from_workorder_list(connection:sqlite3.Connection, cursor:sqlite3.Cursor) ->None:
+    path_to_excel = filedialog.askopenfilenames(initialfile = 'ExcelPYTHON.xlsx', 
+                                        defaultextension = '.db', 
+                                        filetypes = [('Excel', '*.xlsx'), ('All files', '*.*') ])
+    if not path_to_excel:
+        return
+    for file in path_to_excel:
+        excel_file = pd.read_excel(file)
+        
+        all_entries_in_db = cursor.execute('SELECT SM_Nummer FROM Adresszuordnung').fetchall()
+        all_known_sm_numbers = [row['SM_Nummer'] for row in all_entries_in_db]
+        new_addresses = []
+        seen = set()
+        for _, line in excel_file.iterrows():
+            if pd.isnull(line['Was']):
+                continue
+            if 'OLT' in line['Was']:
+                if line['SM'] in all_known_sm_numbers or line['SM'] in seen:
+                    continue
+                new_addresses.append((line['SM'], line['VPSZ'], line['ORT']))
+                seen.add(line['SM'])
+    for smnr, vpsz, address in new_addresses:
+        cursor.execute('''
+                            INSERT INTO 
+                                Adresszuordnung (SM_Nummer, VPSZ, Adresse)
+                            VALUES
+                                (?,?,?)
+                        ''', (smnr, vpsz, address)
+                            )
     connection.commit()
