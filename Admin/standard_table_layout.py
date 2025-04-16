@@ -54,7 +54,6 @@ Lieferschein TEXT,
 Materialbeleg TEXT
 );
 
-
 CREATE TABLE IF NOT EXISTS Warenausgang_Kleinstmaterial_ohne_SM_Bezug(
 ID INTEGER PRIMARY KEY AUTOINCREMENT,
 MatNr INTEGER,
@@ -62,4 +61,11 @@ Bezeichnung TEXT,
 Menge INTEGER,
 Datum DATETIME NOT NULL DEFAULT (datetime(CURRENT_TIMESTAMP, 'localtime'))
 ); 
+
+CREATE TABLE IF NOT EXISTS Adresszuordnung(
+SM_Nummer TEXT PRIMARY KEY,
+VPSZ TEXT,
+Adresse TEXT
+);
+
 '''
