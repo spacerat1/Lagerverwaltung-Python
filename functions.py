@@ -155,7 +155,11 @@ def copy_line(app:application.App) -> None:
     app.window.clipboard_append(output_string)
     app.window.update()
 
-
+def on_mouse_drag(event, app:application.App):
+    row_id = app.output_listbox.identify_row(event.y)
+    if row_id:
+        app.output_listbox.selection_add(row_id)    
+        
 
 def show_critical_material(app:application.App) -> None:
     app.disabled_button.config(state = 'enabled')
@@ -352,11 +356,11 @@ def show_stock(app: application.App) -> None:
     app.output_listbox.column('#0', width = 200, stretch = tk.NO) #erste Spalte fixieren (dort, wo das Parent erscheint)
     if standardmaterial_list:
         tree_standard = app.output_listbox.insert('', 'end', text = 'Standardmaterial', open = True, tags = ('green',))
-        for entry in standardmaterial_list:
+        for entry in sorted(standardmaterial_list, key = lambda x: int(x[0])):
             app.output_listbox.insert(tree_standard, "end", values = entry)
     if small_material_list:
         tree_small_material = app.output_listbox.insert('', 'end', text = 'Kleinstmaterial', open = True, tags = ('green',))
-        for entry in small_material_list:
+        for entry in sorted(small_material_list, key = lambda x: int(x[0])):
             app.output_listbox.insert(tree_small_material, "end", values = entry)
     
     if not standardmaterial_list and not small_material_list:
@@ -576,7 +580,7 @@ def print_screen(app:application.App) -> None:
         sheet.page_setup.orientation = 'landscape'
         sheet.page_setup.fitToPage = True
         sheet.column_dimensions['A'].width = 12
-        sheet.column_dimensions['B'].width = 11
+        sheet.column_dimensions['B'].width = 16
         sheet.column_dimensions['C'].width = 44
         sheet.column_dimensions['D'].width = 7
         sheet.column_dimensions['E'].width = 7
@@ -641,7 +645,7 @@ def print_screen(app:application.App) -> None:
                             sheet.cell(row = idx, column = col).font = xl.styles.Font(color="FF0000", bold = True)
                 except TypeError:
                     pass
-                if sheet.cell(row= idx, column = 5).value.strip() in ('ST', 'SA'):
+                if sheet.cell(row= idx, column = 5).value.strip() in ('ST', 'SA', 'PAK'):
                     amount = int(sheet.cell(row= idx, column=4).value) * 2
                 else:
                     amount = 2
@@ -938,7 +942,10 @@ def delete_selected_entries(app:application.App) -> None:
         values = app.output_listbox.item(selection, 'values')
         if not values:
             continue
-        matnr = app.output_listbox.set(selection, column = 'MatNr')
+        try:
+            matnr = app.output_listbox.set(selection, column = 'MatNr')
+        except tk.TclError:
+            matnr = ''
         try:
             sm = app.output_listbox.set(selection, column = 'SM_Nummer')
         except tk.TclError:
@@ -1022,9 +1029,9 @@ def read_adresses_from_workorder_list(connection:sqlite3.Connection, cursor:sqli
             if pd.isnull(line['Was']):
                 continue
             if 'OLT' in line['Was']:
-                if line['SM'] in all_known_sm_numbers or line['SM'] in seen:
+                if str(line['SM']) in all_known_sm_numbers or line['SM'] in seen:
                     continue
-                new_addresses.append((line['SM'], line['VPSZ'], line['ORT']))
+                new_addresses.append((str(line['SM']), line['VPSZ'], line['ORT']))
                 seen.add(line['SM'])
     for smnr, vpsz, address in new_addresses:
         cursor.execute('''
@@ -1034,4 +1041,6 @@ def read_adresses_from_workorder_list(connection:sqlite3.Connection, cursor:sqli
                                 (?,?,?)
                         ''', (smnr, vpsz, address)
                             )
+        print(smnr, vpsz, address)
     connection.commit()
+    print(f"Done. Added {len(new_addresses)} new addresses.")

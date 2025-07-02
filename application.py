@@ -57,6 +57,7 @@ class App:
         self.window.configure(bg='black')
         self.context_menu = tk.Menu(self.window, tearoff = 0)
         self.window.bind('<Button-3>', lambda event, app = self :fc.show_context_menu(event, app))
+        self.window.bind('<B1-Motion>', lambda event, app = self : fc.on_mouse_drag(event, app))
         self.execution_string = ''
         self.execution_tuple = ''    
         self._init_app()
@@ -100,7 +101,8 @@ class App:
         self.small_materials = [material['MatNr'] for material in small_materials]
         
       
-        self.columns_dict = {'Auffüllen': (80, 'center'),
+        self.columns_dict = {'Adresse' : (800, 'w'),
+                             'Auffüllen': (80, 'center'),
                              'Bedarfsmenge': (110, 'center'),
                              'Bestand': (80, 'e'),
                              'bestellt': (80,'center'),
@@ -126,7 +128,8 @@ class App:
                              'SM_Nummer': (110, 'center'),
                              'SM Nummer / ID': (120, 'center'),
                              'Umbuchungsmenge': (140, 'center'),
-                             'Warenausgangsmenge': (160, 'center')
+                             'VPSZ' : (200, 'e'),
+                             'Warenausgangsmenge': (160, 'center'),
                              }
 
         # these dicts control the output and the filter settings in ADMIN - Deletion Mode 
@@ -136,13 +139,15 @@ class App:
                                'Warenausgabe_Comline' :('SELECT * FROM Warenausgabe_Comline WHERE SM_Nummer LIKE ? AND MatNr LIKE ?', r'%sm%,%matnr%'),
                                'Warenausgang' : ('SELECT * FROM Warenausgang WHERE SM_Nummer LIKE ? AND MatNr LIKE ?', r'%sm%,%matnr%'),
                                'Wareneingang' : ('SELECT * FROM Wareneingang WHERE ID LIKE ?', r'%posnr%,'),
-                               'Warenausgang_Kleinstmaterial_ohne_SM_Bezug':('SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE ID LIKE ?', r'%posnr%,')}
+                               'Warenausgang_Kleinstmaterial_ohne_SM_Bezug':('SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE ID LIKE ?', r'%posnr%,'),
+                               'Adresszuordnung' : ('SELECT * FROM Adresszuordnung WHERE SM_Nummer LIKE ?', r'%sm%,')}
         self.filter_dict = {'Kleinstmaterial' : ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
                             'Standardmaterial' : ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
                             'Warenausgabe_Comline' : ([self.matnr_entry, self.sm_entry], [self.posnr_entry]),
                             'Warenausgang' : ([self.matnr_entry, self.sm_entry], [self.posnr_entry]),
                             'Wareneingang' : ([self.posnr_entry], [self.sm_entry, self.matnr_entry]),
-                            'Warenausgang_Kleinstmaterial_ohne_SM_Bezug': ([self.posnr_entry], [self.sm_entry, self.matnr_entry])
+                            'Warenausgang_Kleinstmaterial_ohne_SM_Bezug': ([self.posnr_entry], [self.sm_entry, self.matnr_entry]),
+                            'Adresszuordnung' : ([self.sm_entry], [self.posnr_entry, self.matnr_entry])
                             }
         
         self.deletion_dict = { 'Kleinstmaterial' : ('DELETE FROM Kleinstmaterial WHERE MatNr = ?', 'matnr,'),
@@ -150,7 +155,8 @@ class App:
                                'Warenausgabe_Comline' :('DELETE FROM Warenausgabe_Comline WHERE SM_Nummer = ? AND Position = ?', 'sm,posnr'),
                                'Warenausgang' : ('DELETE FROM Warenausgang WHERE SM_Nummer = ? AND Position = ?', 'sm,posnr'),
                                'Wareneingang' : ('DELETE FROM Wareneingang WHERE ID = ?', 'posnr,'),
-                               'Warenausgang_Kleinstmaterial_ohne_SM_Bezug':('DELETE FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE ID = ?', 'posnr,')}
+                               'Warenausgang_Kleinstmaterial_ohne_SM_Bezug':('DELETE FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE ID = ?', 'posnr,'),
+                               'Adresszuordnung' : ('DELETE FROM Adresszuordnung WHERE SM_Nummer = ?', 'sm,')}
 
 
 
@@ -291,7 +297,8 @@ class App:
         self.button_change_db = ttk.Button(_top_frame, 
                                            style = 'Green.TButton',
                                            text = 'Pfad ändern',
-                                           command = lambda : fc.change_db_path(self))
+                                           command = lambda : fc.change_db_path(self)
+                                           )
         
         self.button_change_db.pack(side = tk.RIGHT, padx = 50, pady = 5)
         self.label_top.pack(side = tk.LEFT,padx = 100, pady = 10, fill = 'x', expand = True)
@@ -545,6 +552,8 @@ class App:
                                            width = 60,
                                            textvariable=self.ingoing_mat_string_var)
         self.matnr_combobox.set_completion_list(values)
+        self.matnr_combobox.current(0)
+        self.matnr_combobox.select_range(0,tk.END)
         self.mat_label.pack(side = tk.TOP, fill = 'x')
         self.matnr_combobox.pack(side = tk.TOP, fill = 'x')
         self.menge_frame = ttk.Frame(self.ingoing_window)
