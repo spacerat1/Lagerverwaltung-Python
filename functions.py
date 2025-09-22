@@ -684,6 +684,8 @@ def book_outgoing_from_excel_file(app:application.App) -> None:
         return
     all_rows = new_entries = no_booking = already_exists = 0
     
+    
+
     for file in path_to_excel:
         excel_file = pd.read_excel(file)
         valid_entries = []
@@ -754,8 +756,7 @@ def book_outgoing_from_excel_file(app:application.App) -> None:
         all_rows += rows_in_excel
         new_entries += absolute_valid_count
         no_booking += (rows_in_excel - valid_count)
-        already_exists += (valid_count - absolute_valid_count)
-        
+        already_exists += (valid_count - absolute_valid_count)   
     ctypes.windll.user32.MessageBoxW(0,f'''
                 {new_entries} von {all_rows} Datensätze in Datenbank aufgenommen.
                 {no_booking} Einträge enthielten keine Bestellung.
@@ -1013,22 +1014,28 @@ def add_standardmaterial(connection:sqlite3.Connection, cursor:sqlite3.Cursor,  
 
 
 def read_adresses_from_workorder_list(connection:sqlite3.Connection, cursor:sqlite3.Cursor) ->None:
-    path_to_excel = filedialog.askopenfilenames(initialfile = 'ExcelPYTHON.xlsx', 
+    path_to_excel = filedialog.askopenfilenames(initialfile = 'ExcelPYTHON.xlsm', 
                                         defaultextension = '.db', 
                                         filetypes = [('Excel', '*.xlsx'), ('All files', '*.*') ])
     if not path_to_excel:
         return
     for file in path_to_excel:
         excel_file = pd.read_excel(file)
+        start_row  =0
         
         all_entries_in_db = cursor.execute('SELECT SM_Nummer FROM Adresszuordnung').fetchall()
         all_known_sm_numbers = [row['SM_Nummer'] for row in all_entries_in_db]
         new_addresses = []
         seen = set()
-        for _, line in excel_file.iterrows():
+        
+        for idx, line in excel_file.iterrows():
+            if line['ID'] == 'Start':
+                start_row = idx
+                
+        for _, line in excel_file.iloc[start_row:].iterrows():
             if pd.isnull(line['Was']):
                 continue
-            if 'OLT' in line['Was']:
+            if 'OLT' in line['Was'] and 'Auskundung' not in line['Was']:
                 if str(line['SM']) in all_known_sm_numbers or line['SM'] in seen:
                     continue
                 new_addresses.append((str(line['SM']), line['VPSZ'], line['ORT']))

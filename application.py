@@ -264,6 +264,7 @@ class App:
         _style.configure('Red.TCombobox', background = 'black', foreground = 'orange red', font = 'Verdana 10')
         _style.configure('Green.Treeview', font = 'Verdana 11', foreground = 'forest green', background = 'black', fieldbackground = 'black', bordercolor='white', borderwidth = 2)
         _style.configure('Green.Treeview.Heading', background = 'dark green', foreground = 'white', font = 'Verdana 8 bold')
+        _style.configure('Big_Green_Label.TLabel', font = 'Verdana 20 bold', background = 'black', foreground = 'forest_green')
         # print(_style.layout('Green.Treeview'))
         # print(_style.element_options('Treeview.field'))
         # print(_style.element_options('Treeview.padding'))

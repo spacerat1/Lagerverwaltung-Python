@@ -8,8 +8,8 @@ import application
 # EXPERT = database read / write
 # ADMIN = database read / write / delete
 
-user = application.EXPERT
-#user = application.ADMIN
+#user = application.EXPERT
+user = application.ADMIN
 
 if __name__ == '__main__':
     # connect to database
@@ -23,8 +23,8 @@ if __name__ == '__main__':
     app.window.state("zoomed")
     app.window.mainloop()
     #fc.read_adresses_from_workorder_list(connection, cursor)
-    #fc.add_standardmaterial(connection, cursor, (47176999,'Gf-Atk 1x12F B2ca SC/APC 9°0,5m-open 50m', 'ST', 2, 10, False))
-    #fc.add_kleinstmaterial(connection, cursor,(40980059,'E&MMS-ZCH.Kabelabfangung.für.96.S_P.BG', 'SA', 2, 10, False))
+    #fc.add_standardmaterial(connection, cursor, (40318676,'10km1310nm10GB UNI Singlerate SFP Trans', 'ST', 2, 10, False))
+    #fc.add_kleinstmaterial(connection, cursor,(40205817,'E&MMS-Muffe-ZZ', 'ST', 2, 10, False))
     #fc.add_kleinstmaterial(connection, cursor,(40256524,'E&MMS HVt Einzel-KTU', 'PAK', 2, 10, False))
     connection.close()
     
