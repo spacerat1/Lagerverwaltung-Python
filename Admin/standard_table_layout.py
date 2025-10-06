@@ -68,4 +68,19 @@ VPSZ TEXT,
 Adresse TEXT
 );
 
+CREATE TABLE IF NOT EXISTS Veraltetes_Material(
+ID INTEGER PRIMARY KEY AUTOINCREMENT,
+MatNr INTEGER,
+Bezeichnung TEXT,
+Datum DATETIME NOT NULL DEFAULT (datetime(CURRENT_TIMESTAMP, 'localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS Jahresinventur_Korrekturdaten(
+ID INTEGER PRIMARY KEY AUTOINCREMENT,
+MatNr INTEGER,
+Bezeichnung TEXT,
+Menge INTEGER,
+Datum DATETIME NOT NULL DEFAULT (datetime(CURRENT_TIMESTAMP, 'localtime'))
+); 
+
 '''

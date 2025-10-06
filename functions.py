@@ -143,6 +143,7 @@ def copy_line(app:application.App) -> None:
     selections =  app.output_listbox.selection()
     for selection in selections:
         values = app.output_listbox.item(selection, 'values')
+        print(values)
         if not values:
             continue
         lines.append(values)
@@ -182,6 +183,7 @@ def show_critical_material(app:application.App) -> None:
     outgoing_small_material = cursor.execute("SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_BEZUG").fetchall()
     all_materials = cursor.execute("SELECT * FROM Standardmaterial UNION SELECT * FROM Kleinstmaterial").fetchall()
     # calculate the stock
+    
     for row in ingoing:
         ingoing_dict[row['MatNr']] += row['Menge']
 
@@ -202,12 +204,14 @@ def show_critical_material(app:application.App) -> None:
         already_ordered_dict[row['MatNr']] = 'nein' if row['bestellt'] == 0 else 'ja'
         date_dict[row['MatNr']] = row['Datum'] if row['bestellt'] else ''
 
-    # formatting the putput
+    # formatting the output
     small_material_output= []
     standard_material_output = []
     for matnr, booked in sorted(outgoing_dict.items()):
-        if ingoing_dict[matnr] - booked <= app.threshhold_dict[matnr]:
-            output = [matnr, app.materialnames_dict[matnr], ingoing_dict[matnr]-booked, app.units_dict[matnr], app.recommended_amount_dict[matnr], already_ordered_dict[matnr], date_dict[matnr]]
+        ingoing_mat = ingoing_dict.get(matnr, 0)
+        correction_sum = app.correction_dict.get(matnr, 0)
+        if ingoing_mat - booked + correction_sum <= app.threshhold_dict[matnr] and matnr not in app.deprecated_dict:
+            output = [matnr, app.materialnames_dict[matnr], ingoing_dict[matnr]-booked+correction_sum, app.units_dict[matnr], app.recommended_amount_dict[matnr], already_ordered_dict[matnr], date_dict[matnr]]
             if matnr in app.standard_materials:
                 standard_material_output.append(output)
             elif matnr in app.small_materials:
@@ -309,6 +313,7 @@ def show_stock(app: application.App) -> None:
     matnr_entry = app.matnr_entry
     matnr = matnr_entry.get()
     
+
     ingoing = cursor.execute("SELECT * FROM Wareneingang WHERE MatNr LIKE ?", (f'%{matnr}%',)).fetchall()
     ingoing_dict = defaultdict(int)
     for row in ingoing:
@@ -335,7 +340,7 @@ def show_stock(app: application.App) -> None:
     standardmaterial_list = []
     small_material_list = []
     for matnr, menge in ingoing_dict.items():
-        bestand = menge - outgoing_dict.get(matnr, 0)
+        bestand = menge - outgoing_dict.get(matnr, 0) + app.correction_dict.get(matnr, 0)
         bezeichnung = app.materialnames_dict[matnr]
         einheit = app.units_dict[matnr]
         if matnr in app.standard_materials:
@@ -383,7 +388,7 @@ def show_ingoing_material(app:application.App) -> None:
     cursor:sqlite3.Cursor = app.cursor
     matnr = app.matnr_entry.get()
     selection = cursor.execute("SELECT * FROM Wareneingang WHERE MatNr LIKE ?", (f'%{matnr}%',)).fetchall()
-    
+    correction = cursor.execute("SELECT * FROM Jahresinventur_Korrekturdaten WHERE MatNr LIKE ? AND Menge > 0", (f'%{matnr}%',)).fetchall()
     for item in app.output_listbox.get_children():
         app.output_listbox.delete(item)
     
@@ -395,16 +400,29 @@ def show_ingoing_material(app:application.App) -> None:
         width, anchor = app.columns_dict[column]
         app.output_listbox.heading(column, text = column)
         app.output_listbox.column(column, width = width, anchor = anchor, stretch = tk.NO)
-    
-    for entry in selection[::-1]:
-        date = datetime.datetime.strftime(datetime.datetime.strptime(entry['Datum'], r"%Y-%m-%d %H:%M:%S"), r"%d.%m.%Y %H:%M:%S")
-        app.output_listbox.insert('', "end", values = (entry['ID'],
-                                                       entry['MatNr'],
-                                                       entry['Bezeichnung'],
-                                                       entry['Menge'],
-                                                       app.units_dict[entry['MatNr']],
-                                                       date
-                                                       ))
+    if selection:
+        tree_standard = app.output_listbox.insert('', 'end', text = 'Standardlieferung', open = True, tags = ('green',))
+        for entry in selection[::-1]:
+            date = datetime.datetime.strftime(datetime.datetime.strptime(entry['Datum'], r"%Y-%m-%d %H:%M:%S"), r"%d.%m.%Y %H:%M:%S")
+            app.output_listbox.insert(tree_standard, "end", values = (entry['ID'],
+                                                        entry['MatNr'],
+                                                        entry['Bezeichnung'],
+                                                        entry['Menge'],
+                                                        app.units_dict[entry['MatNr']],
+                                                        date
+                                                        ))
+    if correction:
+        tree_correction = app.output_listbox.insert('', 'end', text = 'Inventurkorrektur', open = True, tags = ('green',))
+        for entry in correction:
+            date = datetime.datetime.strftime(datetime.datetime.strptime(entry['Datum'], r"%Y-%m-%d %H:%M:%S"), r"%d.%m.%Y %H:%M:%S")
+            app.output_listbox.insert(tree_correction, "end", values = (entry['ID'],
+                                                        entry['MatNr'],
+                                                        entry['Bezeichnung'],
+                                                        entry['Menge'],
+                                                        app.units_dict[entry['MatNr']],
+                                                        date
+                                                        ))
+
     if not selection:
         app.output_listbox.insert('', 'end', values = ('','','Keine Daten gefunden. Bitte Filter prüfen.'))
 
@@ -432,7 +450,7 @@ def show_outgoing_material(app:application.App) -> None:
     smnr = app.sm_entry.get()
     selection_with_sm = cursor.execute("SELECT * FROM Warenausgang WHERE MatNr LIKE ? AND SM_Nummer LIKE ? AND PosTyp = 9", (f'%{matnr}%', f'%{smnr}%',)).fetchall()
     selection_without_sm = cursor.execute("SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE MatNr LIKE ?", (f'%{matnr}%',)).fetchall()
-
+    correction = cursor.execute("SELECT * FROM Jahresinventur_Korrekturdaten WHERE MatNr LIKE ? AND Menge < 0", (f'%{matnr}%',)).fetchall()
     for item in app.output_listbox.get_children():
         app.output_listbox.delete(item)
     
@@ -474,7 +492,22 @@ def show_outgoing_material(app:application.App) -> None:
                                                                     entry['Menge'],
                                                                     app.units_dict[entry['MatNr']]
                                                                     ))
-    if not selection_with_sm and not selection_without_sm:
+    if correction:
+        tree_correction = app.output_listbox.insert('', 'end', text = 'Inventurkorrektur', open = True, tags = ('green',))
+        for number, entry in enumerate(correction, start= len(selection_with_sm)+len(selection_without_sm)+1):
+            date = datetime.datetime.strftime(datetime.datetime.strptime(entry['Datum'], r"%Y-%m-%d %H:%M:%S"), r"%d.%m.%Y %H:%M:%S")
+            app.output_listbox.insert(tree_correction, "end", values = (number,
+                                                                    entry['ID'],
+                                                                    '',
+                                                                    '',
+                                                                    entry['MatNr'],
+                                                                    entry['Bezeichnung'],
+                                                                    abs(entry['Menge']),
+                                                                    app.units_dict[entry['MatNr']],
+                                                                    date
+                                                                    ))
+    
+    if not selection_with_sm and not selection_without_sm and not correction:
         app.output_listbox.insert('','end', values = ('','','','','','Keine Daten gefunden. Bitte Filter prüfen'))
 
 
@@ -1051,3 +1084,25 @@ def read_adresses_from_workorder_list(connection:sqlite3.Connection, cursor:sqli
         print(smnr, vpsz, address)
     connection.commit()
     print(f"Done. Added {len(new_addresses)} new addresses.")
+
+def write_correction_data_from_yearly_inspection(connection: sqlite3.Connection, cursor: sqlite3.Cursor):
+    path_to_excel = filedialog.askopenfilenames(initialfile = 'Inventurdaten.xlsx', 
+                                        defaultextension = '.xlsx', 
+                                        filetypes = [('Excel', '*.xlsx'), ('All files', '*.*') ])
+    if not path_to_excel:
+        return
+    for file in path_to_excel:
+        excel_file = pd.read_excel(file)
+        for _, line in excel_file.iterrows():
+            matnr = line['MatNr']
+            bezeichnung = line['Bezeichnung']
+            menge = line['Differenz']
+            cursor.execute('''
+                                INSERT INTO 
+                                    Jahresinventur_Korrekturdaten (MatNr, Bezeichnung, Menge)
+                                VALUES
+                                    (?,?,?)
+                            ''', (matnr, bezeichnung, menge)
+                                )
+    connection.commit()
+

@@ -89,12 +89,20 @@ class App:
         self.recommended_amount_dict = defaultdict(int) 
         self.materialnames_dict = defaultdict(str)
         self.units_dict = defaultdict(str)
+        self.deprecated_dict = defaultdict(str)
         materials = self.cursor.execute("SELECT * FROM Standardmaterial UNION SELECT * FROM Kleinstmaterial").fetchall()
+        deprecated_materials = self.cursor.execute("SELECT * FROM Veraltetes_Material").fetchall()
+        self.correction_dict = defaultdict(int)
+        correction_data = self.cursor.execute("SELECT * FROM Jahresinventur_Korrekturdaten")
+        for row in correction_data:
+            self.correction_dict[row['MatNr']] += row['Menge']
         for row in materials:
             self.threshhold_dict[row['MatNr']] = row['Grenzwert']
             self.recommended_amount_dict[row['MatNr']] = row['Auffüllen']
             self.materialnames_dict[row['MatNr']] = row['Bezeichnung']
             self.units_dict[row['MatNr']] = row['Einheit']
+        for row in deprecated_materials:
+              self.deprecated_dict[row['MatNr']] = row['Bezeichnung']
         standard_materials = self.cursor.execute("SELECT * FROM Standardmaterial").fetchall()
         self.standard_materials = [material['MatNr'] for material in standard_materials]
         small_materials = self.cursor.execute("SELECT * FROM Kleinstmaterial").fetchall()

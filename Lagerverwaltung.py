@@ -23,8 +23,9 @@ if __name__ == '__main__':
     app.window.state("zoomed")
     app.window.mainloop()
     #fc.read_adresses_from_workorder_list(connection, cursor)
-    #fc.add_standardmaterial(connection, cursor, (40318676,'10km1310nm10GB UNI Singlerate SFP Trans', 'ST', 2, 10, False))
+    #fc.add_standardmaterial(connection, cursor, (47182895,'E&MMS-L Satz EMK Kassette V 2023 (LIC)', 'ST', 2, 10, False))
     #fc.add_kleinstmaterial(connection, cursor,(40205817,'E&MMS-Muffe-ZZ', 'ST', 2, 10, False))
     #fc.add_kleinstmaterial(connection, cursor,(40256524,'E&MMS HVt Einzel-KTU', 'PAK', 2, 10, False))
+    #fc.write_correction_data_from_yearly_inspection(connection, cursor)
     connection.close()
     
