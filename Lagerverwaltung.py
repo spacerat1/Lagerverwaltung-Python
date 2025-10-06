@@ -8,8 +8,8 @@ import application
 # EXPERT = database read / write
 # ADMIN = database read / write / delete
 
-#user = application.EXPERT
-user = application.ADMIN
+user = application.EXPERT
+#user = application.ADMIN
 
 if __name__ == '__main__':
     # connect to database
