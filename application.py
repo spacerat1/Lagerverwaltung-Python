@@ -148,14 +148,21 @@ class App:
                                'Warenausgang' : ('SELECT * FROM Warenausgang WHERE SM_Nummer LIKE ? AND MatNr LIKE ?', r'%sm%,%matnr%'),
                                'Wareneingang' : ('SELECT * FROM Wareneingang WHERE ID LIKE ?', r'%posnr%,'),
                                'Warenausgang_Kleinstmaterial_ohne_SM_Bezug':('SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE ID LIKE ?', r'%posnr%,'),
-                               'Adresszuordnung' : ('SELECT * FROM Adresszuordnung WHERE SM_Nummer LIKE ?', r'%sm%,')}
+                               'Adresszuordnung' : ('SELECT * FROM Adresszuordnung WHERE SM_Nummer LIKE ?', r'%sm%,'),
+                               'Veraltetes_Material' : ('SELECT * FROM Veraltetes_Material WHERE MatNr LIKE ?', r'%matnr%,'),
+                               'Jahresinventur_Korrekturdaten' : ('SELECT * FROM Jahresinventur_Korrekturdaten WHERE MatNr LIKE ?', r'%matnr%,'),
+                               }
+        # festlegen, welche Eingabefelder aktiviert und deaktiviert sein sollen (Datenbank: [aktiviert], [deaktiviert])
         self.filter_dict = {'Kleinstmaterial' : ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
                             'Standardmaterial' : ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
                             'Warenausgabe_Comline' : ([self.matnr_entry, self.sm_entry], [self.posnr_entry]),
                             'Warenausgang' : ([self.matnr_entry, self.sm_entry], [self.posnr_entry]),
                             'Wareneingang' : ([self.posnr_entry], [self.sm_entry, self.matnr_entry]),
                             'Warenausgang_Kleinstmaterial_ohne_SM_Bezug': ([self.posnr_entry], [self.sm_entry, self.matnr_entry]),
-                            'Adresszuordnung' : ([self.sm_entry], [self.posnr_entry, self.matnr_entry])
+                            'Adresszuordnung' : ([self.sm_entry], [self.posnr_entry, self.matnr_entry]),
+                            'Veraltetes_Material' : ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
+                            'Jahresinventur_Korrekturdaten' : ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
+
                             }
         
         self.deletion_dict = { 'Kleinstmaterial' : ('DELETE FROM Kleinstmaterial WHERE MatNr = ?', 'matnr,'),
@@ -164,7 +171,10 @@ class App:
                                'Warenausgang' : ('DELETE FROM Warenausgang WHERE SM_Nummer = ? AND Position = ?', 'sm,posnr'),
                                'Wareneingang' : ('DELETE FROM Wareneingang WHERE ID = ?', 'posnr,'),
                                'Warenausgang_Kleinstmaterial_ohne_SM_Bezug':('DELETE FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE ID = ?', 'posnr,'),
-                               'Adresszuordnung' : ('DELETE FROM Adresszuordnung WHERE SM_Nummer = ?', 'sm,')}
+                               'Adresszuordnung' : ('DELETE FROM Adresszuordnung WHERE SM_Nummer = ?', 'sm,'),
+                               'Veraltetes_Material' : ('DELETE FROM Veraltetes_Material WHERE ID = ?', 'posnr,'),
+                               'Jahresinventur_Korrekturdaten' : ('DELETE FROM Jahresinventur_Korrekturdaten WHERE ID = ?', 'posnr,'),
+                               }
 
 
 
