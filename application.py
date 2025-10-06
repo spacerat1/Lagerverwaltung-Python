@@ -51,10 +51,13 @@ class App:
         self.connection = connection
         self.cursor = cursor
         self.path_to_db = path_to_db
+        
         self.window = tk.Tk()
         self.window.title('Lagerverwaltung Comline')
         self.window.minsize(1200,768)
         self.window.configure(bg='black')
+        self.dialogroot = self.window
+        self.strDialogResult = ''
         self.context_menu = tk.Menu(self.window, tearoff = 0)
         self.window.bind('<Button-3>', lambda event, app = self :fc.show_context_menu(event, app))
         self.window.bind('<B1-Motion>', lambda event, app = self : fc.on_mouse_drag(event, app))
@@ -126,6 +129,7 @@ class App:
                              'MatNr': (110,'center'),
                              'MatNr.': (110, 'center'),
                              'Menge':(80, 'e'),
+                             'Menge ':(80, 'center'),
                              'Nr.': (80, 'e'),
                              'Position': (80,'center'),
                              'Pos.Typ': (60,'center'),
@@ -598,6 +602,40 @@ class App:
         self.menge_frame.pack(side = tk.LEFT, padx = 10)
         self.matnr_combobox.focus()
         self.ingoing_window.mainloop()
+
+
+    def InputBox(self):        
+        dialog = tk.Toplevel(self.window)
+        
+
+        frame = ttk.Frame(dialog, style = 'Frame_grey.TFrame', border = 1)
+        frame.pack()
+
+        label = ttk.Label(frame, style = 'Green.TLabel', text = 'bestellte Menge?')
+        label.pack(side = tk.TOP, padx = 10, pady = 10)
+
+        entry = ttk.Entry(frame, style = 'Green.TEntry')
+        entry.pack(side = tk.TOP, padx = 10, pady = 10)
+        entry.bind('<Return>', lambda _ : self.DialogResult(entry.get(), dialog))
+
+        submit = ttk.Button(frame, style = 'Blue.TButton', text='OK', command=lambda: self.DialogResult(entry.get(), dialog))
+        submit.pack(side = tk.TOP, padx = 10, pady = 10)
+
+        root_name = self.dialogroot.winfo_pathname(self.dialogroot.winfo_id())
+        dialog_name = dialog.winfo_pathname(dialog.winfo_id())
+
+        # These two lines show a modal dialog
+        self.dialogroot.tk.eval('tk::PlaceWindow {0} widget {1}'.format(dialog_name, root_name))
+        entry.focus_set()
+        self.dialogroot.mainloop()
+
+        return self.strDialogResult
+
+    def DialogResult(self, result, dialog):
+        self.strDialogResult = result
+        #This line quits from the MODAL STATE but doesn't close or destroy the modal dialog
+        self.dialogroot.quit()
+        dialog.destroy()
 
     
 

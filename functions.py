@@ -177,6 +177,7 @@ def show_critical_material(app:application.App) -> None:
     outgoing_dict = defaultdict(int)
     already_ordered_dict = defaultdict(int)
     date_dict = defaultdict(str)
+    mengen_dict = defaultdict(str)
     
     ingoing = cursor.execute("SELECT * FROM Wareneingang").fetchall()
     outgoing = cursor.execute("SELECT * FROM Warenausgang").fetchall()
@@ -203,6 +204,11 @@ def show_critical_material(app:application.App) -> None:
     for row in all_materials:
         already_ordered_dict[row['MatNr']] = 'nein' if row['bestellt'] == 0 else 'ja'
         date_dict[row['MatNr']] = row['Datum'] if row['bestellt'] else ''
+        if row['Menge']:
+            menge = row['Menge']
+        else:
+            menge = ''
+        mengen_dict[row['MatNr']] = menge if row['bestellt'] else ''
 
     # formatting the output
     small_material_output= []
@@ -211,7 +217,7 @@ def show_critical_material(app:application.App) -> None:
         ingoing_mat = ingoing_dict.get(matnr, 0)
         correction_sum = app.correction_dict.get(matnr, 0)
         if ingoing_mat - booked + correction_sum <= app.threshhold_dict[matnr] and matnr not in app.deprecated_dict:
-            output = [matnr, app.materialnames_dict[matnr], ingoing_dict[matnr]-booked+correction_sum, app.units_dict[matnr], app.recommended_amount_dict[matnr], already_ordered_dict[matnr], date_dict[matnr]]
+            output = [matnr, app.materialnames_dict[matnr], ingoing_dict[matnr]-booked+correction_sum, app.units_dict[matnr], app.recommended_amount_dict[matnr], already_ordered_dict[matnr], mengen_dict[matnr], date_dict[matnr]]
             if matnr in app.standard_materials:
                 standard_material_output.append(output)
             elif matnr in app.small_materials:
@@ -220,7 +226,7 @@ def show_critical_material(app:application.App) -> None:
     # fill the treeview widget
     for item in app.output_listbox.get_children():
         app.output_listbox.delete(item)
-    columns = ['MatNr.', 'Bezeichnung', 'Bestand', 'Einheit', 'empfohlene Menge', 'bestellt', 'Datum', 'LAST_COLUMN']
+    columns = ['MatNr.', 'Bezeichnung', 'Bestand', 'Einheit', 'empfohlene Menge', 'bestellt', 'Menge ', 'Datum', 'LAST_COLUMN']
     app.output_listbox.configure(columns = columns)
     for column in columns:
         if column == 'LAST_COLUMN':
@@ -279,18 +285,20 @@ def toggle_ordered_status(app:application.App) -> None:
                            )
         else:
             datum = datetime.datetime.strftime(datetime.datetime.now(), r'%d.%m.%Y %H:%M')
-            #datum = datetime.datetime.now()
+            menge = app.InputBox()
             cursor.execute( ''' UPDATE Standardmaterial
                                 SET bestellt = ?,
-                                    Datum = ?
+                                    Datum = ?,
+                                    Menge = ?
                                 WHERE MatNr = ? 
-                            ''', (status, datum, mat_number)
+                            ''', (status, datum, menge, mat_number)
                             )
             cursor.execute( ''' UPDATE Kleinstmaterial
                                 SET bestellt = ?,
-                                    Datum = ?
+                                    Datum = ?,
+                                    Menge = ?
                                 WHERE MatNr = ?
-                            ''',(status, datum, mat_number)
+                            ''',(status, datum, menge, mat_number)
                             )   
     connection.commit()
     show_critical_material(app)    
