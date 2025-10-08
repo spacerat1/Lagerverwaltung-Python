@@ -255,13 +255,15 @@ def toggle_ordered_status(app:application.App) -> None:
 
     selections =  app.output_listbox.selection()
     mat_numbers = []
+    mat_names = []
     for selection in selections:
         values = app.output_listbox.item(selection, 'values')
         if not values:
             continue
         mat_numbers.append(values[0])
+        mat_names.append(values[1])
 
-    for mat_number in mat_numbers:
+    for mat_number, mat_name in zip(mat_numbers, mat_names):
         cursor.execute('''SELECT bestellt 
                        FROM Standardmaterial 
                        WHERE MatNr = ? 
@@ -285,7 +287,7 @@ def toggle_ordered_status(app:application.App) -> None:
                            )
         else:
             datum = datetime.datetime.strftime(datetime.datetime.now(), r'%d.%m.%Y %H:%M')
-            menge = app.InputBox()
+            menge = app.InputBox(mat_number, mat_name)
             cursor.execute( ''' UPDATE Standardmaterial
                                 SET bestellt = ?,
                                     Datum = ?,
@@ -502,7 +504,11 @@ def show_outgoing_material(app:application.App) -> None:
                                                                     ))
     if correction:
         tree_correction = app.output_listbox.insert('', 'end', text = 'Inventurkorrektur', open = True, tags = ('green',))
-        for number, entry in enumerate(correction, start= len(selection_with_sm)+len(selection_without_sm)+1):
+        if selection_without_sm and not smnr:
+            start = len(selection_with_sm) + len(selection_without_sm)
+        else:
+            start = len(selection_with_sm)
+        for number, entry in enumerate(correction, start= start+1):
             date = datetime.datetime.strftime(datetime.datetime.strptime(entry['Datum'], r"%Y-%m-%d %H:%M:%S"), r"%d.%m.%Y %H:%M:%S")
             app.output_listbox.insert(tree_correction, "end", values = (number,
                                                                     entry['ID'],

@@ -604,15 +604,17 @@ class App:
         self.ingoing_window.mainloop()
 
 
-    def InputBox(self):        
+    def InputBox(self, mat_number, mat_name):        
         dialog = tk.Toplevel(self.window)
         
 
         frame = ttk.Frame(dialog, style = 'Frame_grey.TFrame', border = 1)
         frame.pack()
 
-        label = ttk.Label(frame, style = 'Green.TLabel', text = 'bestellte Menge?')
-        label.pack(side = tk.TOP, padx = 10, pady = 10)
+        mat_label = ttk.Label(frame, style = 'Green.TLabel', text = f"{mat_number} {mat_name}")
+        mat_label.pack(side = tk.TOP, padx = 10, pady = 10)
+        label_2 = ttk.Label(frame, style = 'Green.TLabel', text = 'bestellte Menge?')
+        label_2.pack(side = tk.TOP, padx = 10, pady = 10)
 
         entry = ttk.Entry(frame, style = 'Green.TEntry')
         entry.pack(side = tk.TOP, padx = 10, pady = 10)
