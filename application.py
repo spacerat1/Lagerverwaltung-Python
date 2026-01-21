@@ -87,6 +87,8 @@ class App:
     def _create_standard_values(self) -> None:
         # tag for the parents in the Treeview widget
         self.output_listbox.tag_configure('green', background='forest green', foreground = 'white', font = 'Verdana 11 bold')
+        self.output_listbox.tag_configure('red_font', background = 'black', foreground = 'orange red')
+        self.output_listbox.tag_configure('green_font', background = 'black', foreground = 'forest green')
         # some useful dicts
         self.threshhold_dict = defaultdict(int) 
         self.recommended_amount_dict = defaultdict(int) 

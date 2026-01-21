@@ -240,7 +240,10 @@ def show_critical_material(app:application.App) -> None:
     if standard_material_output:
         tree_standard = app.output_listbox.insert('', 'end', text = 'Standardmaterial', open = True, tags = ('green',))
         for entry in standard_material_output:
-            app.output_listbox.insert(tree_standard, "end", values = entry)
+            if entry[2] <=0:
+                app.output_listbox.insert(tree_standard, "end", values = entry, tags = ('red_font',))
+            else:
+                app.output_listbox.insert(tree_standard, "end", values = entry, tags = ('green_font',))
     if small_material_output:
         tree_small_material = app.output_listbox.insert('', 'end', text = 'Kleinstmaterial', open = True, tags = ('green',))
         for entry in small_material_output:
@@ -694,6 +697,8 @@ def print_screen(app:application.App) -> None:
                     pass
                 if sheet.cell(row= idx, column = 5).value.strip() in ('ST', 'SA', 'PAK'):
                     amount = int(sheet.cell(row= idx, column=4).value) * 2
+                    if amount > 30: # für den Fall, dass  mehr als 15 Kästchen gezeichnet werden sollen, wird nur 1 gezeichnet. 
+                        amount = 2
                 else:
                     amount = 2
                 for col in range(amount):
