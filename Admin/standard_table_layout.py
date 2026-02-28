@@ -83,4 +83,13 @@ Menge INTEGER,
 Datum DATETIME NOT NULL DEFAULT (datetime(CURRENT_TIMESTAMP, 'localtime'))
 ); 
 
+CREATE TABLE IF NOT EXISTS Bundles(
+ID INTEGER PRIMARY KEY AUTOINCREMENT,
+MatNr INTEGER,
+Bezeichnung TEXT,
+Packungsinhalt TEXT
+); 
+
+
+
 '''
