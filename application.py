@@ -85,8 +85,10 @@ class App:
         fc.show_critical_material(self)
     
     def _create_standard_values(self) -> None:
-        # tag for the parents in the Treeview widget
+        # tags for the parents in the Treeview widget
         self.output_listbox.tag_configure('green', background='forest green', foreground = 'white', font = 'Verdana 11 bold')
+        self.output_listbox.tag_configure('bundle_head', background='grey65', foreground = 'black', font = 'Verdana 11 bold')
+        self.output_listbox.tag_configure('bundle', background='grey80', foreground = 'black', font = 'Verdana 11')
         self.output_listbox.tag_configure('red_font', background = 'black', foreground = 'orange red')
         self.output_listbox.tag_configure('green_font', background = 'black', foreground = 'forest green')
         # some useful dicts
@@ -117,6 +119,7 @@ class App:
         self.columns_dict = {'Adresse' : (800, 'w'),
                              'Auffüllen': (80, 'center'),
                              'Bedarfsmenge': (110, 'center'),
+                             'Bemerkungen': (1000, 'w'),
                              'Bestand': (80, 'e'),
                              'bestellt': (80,'center'),
                              'Bezeichnung': (400, 'w'),
