@@ -309,6 +309,33 @@ def toggle_ordered_status(app:application.App) -> None:
     show_critical_material(app)    
 
 
+def get_bundles_amount(matnr:int, app) -> dict[int:int]:
+    cursor = app.cursor
+    ingoing = cursor.execute("SELECT * FROM Wareneingang WHERE MatNr = ?", (matnr,)).fetchall()
+    ingoing_dict = defaultdict(int)
+    for row in ingoing:
+        ingoing_dict[row['MatNr']] += row['Menge']
+    outgoing = cursor.execute("SELECT * FROM Warenausgang WHERE MatNr = ?", (matnr,)).fetchall()
+    outgoing_dict = defaultdict(int)
+    for row in outgoing:
+        if row['Warenausgangsmenge'] != 0:
+            menge = row['Warenausgangsmenge']
+        else:
+            menge = row['Bedarfsmenge']
+        if row['PosTyp'] == 8:
+            outgoing_dict[row['MatNr']] -= menge
+        elif row['PosTyp'] == 9:
+            outgoing_dict[row['MatNr']] += menge
+    outgoing_small_material = cursor.execute("SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_BEZUG").fetchall()
+    for row in outgoing_small_material:
+        outgoing_dict[row['MatNr']] += row['Menge']
+    for matnr, menge in ingoing_dict.items():       
+        bestand = menge - outgoing_dict.get(matnr, 0) + app.correction_dict.get(matnr, 0)
+    return bestand
+    
+
+
+
 def show_stock(app: application.App) -> None:
     app.disabled_button.config(state = 'enabled')
     app.disabled_button = app.button_bestand
@@ -326,7 +353,12 @@ def show_stock(app: application.App) -> None:
     matnr_entry = app.matnr_entry
     matnr = matnr_entry.get()
     
-
+    bundles = cursor.execute("SELECT * FROM Bundles").fetchall()
+    bundles_dict = defaultdict(list)
+    for row in bundles:
+        menge = get_bundles_amount(row['MatNr'], app)
+        bundles_dict[row['MatNr']] = [row['Bezeichnung'], eval(row['Packungsinhalt']), menge]
+    
     ingoing = cursor.execute("SELECT * FROM Wareneingang WHERE MatNr LIKE ?", (f'%{matnr}%',)).fetchall()
     ingoing_dict = defaultdict(int)
     for row in ingoing:
@@ -352,18 +384,33 @@ def show_stock(app: application.App) -> None:
     
     standardmaterial_list = []
     small_material_list = []
-    for matnr, menge in ingoing_dict.items():
-        bestand = menge - outgoing_dict.get(matnr, 0) + app.correction_dict.get(matnr, 0)
+    for matnr, menge in ingoing_dict.items():       
+        bemerkung = ''
         bezeichnung = app.materialnames_dict[matnr]
         einheit = app.units_dict[matnr]
+        bundle_correction = 0 # Das Material aus Bundles wird den Einzelpositionen hinzugerechnet
+        for bundle, data in bundles_dict.items():
+            bundle_bezeichnung, content, bundle_menge = data
+            if matnr in content:
+                bundle_correction = bundle_menge
+                if not bemerkung:
+                    bemerkung += f'davon {bundle_menge} {einheit} aus Bundle {bundle}'
+                else:
+                    bemerkung += f", {bundle_menge} {einheit} aus {bundle}"
+            
+                
+        bestand = menge - outgoing_dict.get(matnr, 0) + app.correction_dict.get(matnr, 0) + bundle_correction
+        
+        
         if matnr in app.standard_materials:
-            standardmaterial_list.append((matnr, bezeichnung, bestand, einheit))
+            standardmaterial_list.append((matnr, bezeichnung, bestand, einheit, bemerkung))
         elif matnr in app.small_materials:
-            small_material_list.append((matnr, bezeichnung, bestand, einheit))
+            small_material_list.append((matnr, bezeichnung, bestand, einheit, bemerkung))
+  
     
     for item in app.output_listbox.get_children():
         app.output_listbox.delete(item)
-    columns = ['MatNr.', 'Bezeichnung', 'Bestand', 'Einheit', 'LAST_COLUMN']
+    columns = ['MatNr.', 'Bezeichnung', 'Bestand', 'Einheit', 'Bemerkungen', 'LAST_COLUMN']
     app.output_listbox.configure(columns = columns)
     for column in columns:
         if column == 'LAST_COLUMN':
@@ -543,6 +590,14 @@ def show_material_for_order(app:application.App) -> None:
 
     cursor:sqlite3.Cursor = app.cursor
     smnr = app.sm_entry.get()
+    
+    bundles = cursor.execute("SELECT * FROM Bundles").fetchall()
+    bundles_dict = defaultdict(list)
+    for row in bundles:
+        menge = get_bundles_amount(row['MatNr'], app)
+        bundles_dict[row['MatNr']] = [row['Bezeichnung'], eval(row['Packungsinhalt']), menge]
+    
+    
     selection = cursor.execute("SELECT * FROM Warenausgabe_Comline WHERE SM_Nummer LIKE ?", (f'%{smnr}%',)).fetchall()
     selection_addresses = cursor.execute("SELECT * FROM Adresszuordnung WHERE SM_Nummer LIKE ?", (f'%{smnr}%',)).fetchall()
     standard_material = []
@@ -585,7 +640,18 @@ def show_material_for_order(app:application.App) -> None:
     if standard_material:
         tree_standard = app.output_listbox.insert('', 'end', text = 'Standardmaterial', open = True, tags = ('green',))
         for entry in standard_material:
-            app.output_listbox.insert(tree_standard, "end", values = entry)
+            bundle_nr = entry[1]
+            amount = entry[3]
+            if bundle_nr in bundles_dict:
+                parent = app.output_listbox.insert(tree_standard, "end", text = 'Bundle', open  = True, tags = ('bundle_head',),values = entry)
+                bundle_name, contents, bundle_amount = bundles_dict[bundle_nr]
+                for matnr in contents:
+                    name = app.materialnames_dict[matnr]
+                    unit = app.units_dict[matnr]
+                    app.output_listbox.insert(parent, "end", values = ('', matnr, name, amount, unit), tags = ('bundle',))
+            else:
+                app.output_listbox.insert(tree_standard, "end", values = entry)
+    
     if small_material:
         tree_small_material = app.output_listbox.insert('', 'end', text = 'Kleinstmaterial', open = True, tags = ('green',))
         for entry in small_material:
@@ -625,6 +691,21 @@ def print_screen(app:application.App) -> None:
                     address.append(output)
                 else:
                     telekom_material.append(output)
+                sub_childs = app.output_listbox.get_children(child)
+                if sub_childs:
+                    for sub_child in sub_childs:
+                        values = app.output_listbox.item(sub_child)['values']
+                        values = [str(x) for x in values]
+                        output = '\t'.join(values)
+                        if app.output_listbox.item(parent)['text'] == 'Standardmaterial':
+                            standard_material.append(output)
+                        elif app.output_listbox.item(parent)['text'] == 'Kleinstmaterial':
+                            small_material.append(output)
+                        elif app.output_listbox.item(parent)['text'] == 'Adressen':
+                            address.append(output)
+                        else:
+                            telekom_material.append(output)
+
         wb:xl.Workbook = xl.Workbook()
         sheet = wb.active
         sheet.page_setup.orientation = 'landscape'
@@ -675,40 +756,48 @@ def print_screen(app:application.App) -> None:
                     sheet.cell(column =col, row = row, value = word)
         border = xl.styles.Side(border_style = 'thin', color = '000000')
         for idx, row in enumerate(sheet, start = 1):
-            if not row[0].value:
+            if not row[1].value:
                 continue
-            try:
-                # test for number in first column
-                _ = int(row[0].value)
-                # if no type in column 5, ignore this row
-                if not (sheet.cell(row= idx, column = 5).value):
-                    for col in range(1,4):
-                            sheet.cell(row = idx, column = col).font = xl.styles.Font(color="3282F6")
-                    continue
-                # draw cell bottom lines
+            
+            # if no type in column 5, ignore this row
+            if not (sheet.cell(row= idx, column = 5).value):
+                for col in range(1,4):
+                        sheet.cell(row = idx, column = col).font = xl.styles.Font(color="3282F6")
+                continue
+            # draw cell bottom lines
+            if row[0].value:
+                start_col = 1
+                bundle = False
+            else: # Bundle entdeckt - Unterstriche ab der 2. Spalte und das gesamte Bundle in eine Farbe umändern
+                start_col = 2
                 for col in range(1,6):
-                    sheet.cell(row = idx, column = col).border = xl.styles.Border(bottom = border)
-                # change font color to red when amount > 1 and unit is M or n/a
-                try:
-                    if int(sheet.cell(row = idx, column = 4).value) > 1 and sheet.cell(row= idx, column = 5).value.strip() in ('M', 'n/a'):
-                        for col in range(1,6):
-                            sheet.cell(row = idx, column = col).font = xl.styles.Font(color="FF0000", bold = True)
-                except TypeError:
-                    pass
-                if sheet.cell(row= idx, column = 5).value.strip() in ('ST', 'SA', 'PAK'):
-                    amount = int(sheet.cell(row= idx, column=4).value) * 2
-                    if amount > 30: # für den Fall, dass  mehr als 15 Kästchen gezeichnet werden sollen, wird nur 1 gezeichnet. 
-                        amount = 2
-                else:
+                    if not bundle:
+                        sheet.cell(row = idx-1, column = col).fill = xl.styles.PatternFill(start_color = "B6B6B6", fill_type = "solid" )    
+                    sheet.cell(row = idx, column = col).fill = xl.styles.PatternFill(start_color = "E6E6E6", fill_type = "solid" )
+                bundle = True
+            for col in range(start_col,6):
+                sheet.cell(row = idx, column = col).border = xl.styles.Border(bottom = border)
+            # change font color to red when amount > 1 and unit is M or n/a
+            try:
+                if int(sheet.cell(row = idx, column = 4).value) > 1 and sheet.cell(row= idx, column = 5).value.strip() in ('M', 'n/a'):
+                    for col in range(1,6):
+                        sheet.cell(row = idx, column = col).font = xl.styles.Font(color="FF0000", bold = True)
+            except TypeError:
+                pass
+            if sheet.cell(row= idx, column = 5).value.strip() in ('ST', 'SA', 'PAK'):
+                amount = int(sheet.cell(row= idx, column=4).value) * 2
+                if amount > 30: # für den Fall, dass  mehr als 15 Kästchen gezeichnet werden sollen, wird nur 1 gezeichnet. 
                     amount = 2
-                for col in range(amount):
-                    if col % 2 == 0:
-                        continue
-                    sheet.cell(row = idx, column = col+7).border = xl.styles.Border(bottom = border, top = border, left = border, right = border)   
-            except ValueError:
-                continue
+            else:
+                amount = 2
+            for col in range(amount):
+                if col % 2 == 0:
+                    continue
+                sheet.cell(row = idx, column = col+7).border = xl.styles.Border(bottom = border, top = border, left = border, right = border)   
+            
         
         wb.save(file_path)
+        
         try:
             excel_app = win32com.client.Dispatch('Excel.Application')
             excel_app.Visible = False
@@ -1062,6 +1151,22 @@ def add_standardmaterial(connection:sqlite3.Connection, cursor:sqlite3.Cursor,  
                             (?,?,?,?,?,?)
                         ''', (matnr, bezeichnung, einheit, grenzwert, up_to, bestellt)
                         )
+    connection.commit()
+
+
+def add_bundle(connection:sqlite3.Connection, cursor:sqlite3.Cursor, matnr:int, bezeichnung:str, data:list) -> None:
+    if type(data) is not list:
+        print("Fehler: Datenformat muss Liste sein. z.B. [123,456]")
+        return None
+    
+    data = str(data)
+    cursor.execute('''
+                    INSERT INTO 
+                        Bundles(MatNr,Bezeichnung,Packungsinhalt)
+                    VALUES
+                        (?,?,?)
+                    ''', (matnr, bezeichnung, data)
+                    )
     connection.commit()
 
 
