@@ -1,711 +1,707 @@
 import sqlite3
-import tkinter as tk
-import tkinter.ttk as ttk
 import functions as fc
 from collections import defaultdict
+
+from PyQt6.QtWidgets import (
+    QMainWindow, QWidget, QFrame,
+    QVBoxLayout, QHBoxLayout, 
+    QPushButton, QLabel, QLineEdit, QComboBox,
+    QTreeWidget, QTreeWidgetItem,
+    QDialog, QAbstractItemView,
+    QHeaderView, QCompleter
+)
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor, QFont, QBrush
 
 ADMIN = 'admin'
 EXPERT = 'expert'
 STANDARD = 'standard'
 
+# ── Color constants ──────────────────────────────────────────────────
+BLACK        = '#000000'
+FOREST_GREEN = '#228B22'
+ORANGE_RED   = '#FF4500'
+DEEP_SKY     = '#00BFFF'
+DARK_GREEN   = '#006400'
+LIGHT_GREEN  = '#90EE90'
+GREY65       = '#A6A6A6'
+GREY80       = '#CCCCCC'
+GREY10       = '#1A1A1A'
+WHITE        = '#FFFFFF'
 
-class App:
+FRAME_COLOR = 'dimgrey'
+
+# ── Stylesheet helpers ───────────────────────────────────────────────
+def _btn(fg: str, bg: str = BLACK, disabled_fg: str | None = None,
+         disabled_bg: str | None = None) -> str:
+    dfg = disabled_fg or fg
+    dbg = disabled_bg or bg
+    return (
+        f"QPushButton{{color:{fg};background:{bg};font:10pt Verdana;"
+        f"border:1px solid {fg};padding:4px 8px;}}"
+        f"QPushButton:hover{{background:{fg};color:{BLACK};}}"
+        f"QPushButton:pressed{{background:{fg};color:{BLACK};border-style:inset;}}"
+        f"QPushButton:disabled{{color:{dfg};background:{dbg};"
+        f"border:2px inset turquoise;}}"
+    )
+
+GREEN_BTN  = _btn(FOREST_GREEN, BLACK, BLACK, FOREST_GREEN)
+BLUE_BTN   = _btn(DEEP_SKY)
+RED_BTN    = _btn(ORANGE_RED)
+
+GREEN_LABEL_SS  = f"color:{FOREST_GREEN};background:{BLACK};font:10pt Verdana; border: 1px solid green"
+GREEN2_LABEL_SS = f"color:{FOREST_GREEN};background:{BLACK};font:bold 10pt Verdana; border: 1px solid green"
+RED_LABEL_SS    = f"color:{ORANGE_RED};background:{BLACK};font:10pt Verdana;"
+BLUE_LABEL_SS   = f"color:{DEEP_SKY};background:{BLACK};font:10pt Verdana; border : 0px"
+
+GREEN_ENTRY_SS  = (f"QLineEdit{{color:{BLACK};background:{WHITE};"
+                   f"font:bold 10pt Verdana;border:1px solid {FOREST_GREEN};}}"
+                   f"QLineEdit:disabled{{background:{GREY10};}}")
+
+GREEN_COMBO_SS  = (f"QComboBox{{color:{FOREST_GREEN};background:{BLACK};"
+                   f"font:10pt Verdana;border:1px solid {FOREST_GREEN};}}"
+                   f"QComboBox QAbstractItemView{{color:{FOREST_GREEN};"
+                   f"background:{BLACK};}}")
+
+RED_COMBO_SS    = (f"QComboBox{{color:{ORANGE_RED};background:{BLACK};"
+                   f"font:10pt Verdana;border:1px solid {ORANGE_RED};}}"
+                   f"QComboBox QAbstractItemView{{color:{ORANGE_RED};"
+                   f"background:{BLACK};}}")
+
+TREE_SS = (
+    f"QTreeWidget{{color:{FOREST_GREEN};background:{BLACK};"
+    f"font:11pt Verdana;border:2px solid {FRAME_COLOR};" #WHITE
+    f"alternate-background-color:{BLACK};}}"
+    f"QTreeWidget::item:selected{{background:{LIGHT_GREEN};color:{BLACK};}}"
+    f"QHeaderView::section{{background:{DARK_GREEN};color:{WHITE};"
+    f"font:bold 8pt Verdana;border:1px solid {BLACK};}}"
+)
+
+FRAME_SS  = f"background:{BLACK};border:2px groove {FRAME_COLOR};"
+FRAME2_SS = f"background:{BLACK};border:2px groove {FRAME_COLOR};"
+
+
+# ── InputBox dialog ──────────────────────────────────────────────────
+class InputBoxDialog(QDialog):
+    """Replaces the Tkinter Toplevel InputBox / DialogResult pattern."""
+
+    def __init__(self, parent, mat_number: str, mat_name: str):
+        super().__init__(parent)
+        self.setWindowTitle('Bestellmenge')
+        self.setModal(True)
+        self.result_text = ''
+
+        self.setStyleSheet(f"background:{BLACK};")
+        layout = QVBoxLayout(self)
+
+        mat_label = QLabel(f"{mat_number} {mat_name}", self)
+        mat_label.setStyleSheet(GREEN_LABEL_SS)
+        layout.addWidget(mat_label)
+
+        qty_label = QLabel('bestellte Menge?', self)
+        qty_label.setStyleSheet(GREEN_LABEL_SS)
+        layout.addWidget(qty_label)
+
+        self.entry = QLineEdit(self)
+        self.entry.setStyleSheet(GREEN_ENTRY_SS)
+        layout.addWidget(self.entry)
+
+        ok_btn = QPushButton('OK', self)
+        ok_btn.setStyleSheet(BLUE_BTN)
+        ok_btn.clicked.connect(self._accept)
+        self.entry.returnPressed.connect(self._accept)
+        layout.addWidget(ok_btn)
+
+        self.entry.setFocus()
+
+    def _accept(self):
+        self.result_text = self.entry.text()
+        self.accept()
+
+
+# ── Main App window ──────────────────────────────────────────────────
+class App(QMainWindow):
     '''
-    This class creates the front-end for a warehouse management sqlite3 database.
+    PyQt6 port of the Tkinter warehouse management front-end.
 
     top_buttons:
-        - STANDARD (all users)- 
+        - STANDARD (all users)-
         Pfad ändern: changes the path to the underlying sqlite3 database
-        Kritisches Material anzeigen: shows material, that is below a certain threshhold
-        Bestand anzeigen: shows the stock of the material
-        Wareneingang anzeigen: shows all ingoing material
-        Warenausgang anzeigen: shows all outgoing material
-        Material für SM-Auftrag anzeigen: shows ALL materials needed for a specific work order (including external bought material)
+        Kritisches Material anzeigen: shows material below a threshold
+        Bestand anzeigen: shows the stock
+        Wareneingang anzeigen: shows ingoing material
+        Warenausgang anzeigen: shows outgoing material
+        Material für SM-Auftrag anzeigen: shows all materials for a work order
         - EXPERT -
         Wareneingang buchen (Anlieferung CTDI): book incoming material
-        Warenausgang buchen (Excel aus PSL): book outgoing material bound to a specific work order by reading an excel file created in PSL (SAP app)
-        Warenausgang buchen (nur Kleinstmaterial): book outgoing material independent of work order
-        - ADMIN - 
-        Einträge aus Datenbank löschen: select entries you want to delete from the underlying sqlite3 database
-        Combobox: choose from which underlying table you want to delete entries
-    filters:
-        - dependent on which button was pressed, the filters are active / inactive -
-        Materialnummer: material number
-        SM Nummer: work order
-        Position / ID: position or ID in the underlying sqlite3 database table
-    bottom_buttons:
-        - STANDARD - 
-        Drucken: only available after 'Material für SM Auftrag anzeigen' button was pressed
-                * exports the shown text into an Excel file, formats it and prints it on the standard printer
-        - EXPERT - 
-        Bestellstatus ändern: only available after 'Kritisches Material anzeigen' button was pressed
-                * toggles the order status from the critical material (ordered / not ordered)
+        Warenausgang buchen (Excel aus PSL): book outgoing material via Excel
+        Warenausgang buchen (nur Kleinstmaterial): book outgoing (no order)
         - ADMIN -
-        angezeigte Daten löschen: only available after 'Einträge aus Datenbank löschen' button was pressed
-                * deletes all shown (filtered) entries from the underlying sqlite3 database 
+        Einträge aus Datenbank löschen: delete entries from the database
+        Combobox: choose which table to delete from
+    filters:
+        Materialnummer / SM Nummer / Position / ID
+    bottom_buttons:
+        Drucken / Bestellstatus ändern / angezeigte Daten löschen
     '''
-    
-    
-    def __init__(self, connection:sqlite3.Connection, cursor:sqlite3.Cursor, user:str, path_to_db:str):
+
+    def __init__(self, connection: sqlite3.Connection,
+                 cursor: sqlite3.Cursor, user: str, path_to_db: str):
+        super().__init__()
         self.user = user
         self.connection = connection
         self.cursor = cursor
         self.path_to_db = path_to_db
-        
-        self.window = tk.Tk()
-        self.window.title('Lagerverwaltung Comline')
-        self.window.minsize(1200,768)
-        self.window.configure(bg='black')
-        self.dialogroot = self.window
+
         self.strDialogResult = ''
-        self.context_menu = tk.Menu(self.window, tearoff = 0)
-        self.window.bind('<Button-3>', lambda event, app = self :fc.show_context_menu(event, app))
-        self.window.bind('<B1-Motion>', lambda event, app = self : fc.on_mouse_drag(event, app))
         self.execution_string = ''
-        self.execution_tuple = ''    
+        self.execution_tuple = ''
+        self.user_closed_window = False
+
+        self.setWindowTitle('Lagerverwaltung Comline')
+        self.setMinimumSize(1200, 768)
+        self.setStyleSheet(f"background:{BLACK};")
+
+        # context menu (right-click) – connect to fc helper
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(
+            lambda pos: fc.show_context_menu(pos, self))
+
         self._init_app()
 
+    # ── Initialisation ───────────────────────────────────────────────
     def _init_app(self) -> None:
-        # create the styles and widgets
-        self.style:ttk.Style = self._create_styles()
-        self.top_frame:ttk.Frame = self._get_top_frame()
-        self.button_frame:ttk.Frame = self._get_button_frame()
-        self.filter_frame:ttk.Frame = self._get_filter_frame()
-        self.bottom_frame:ttk.Frame = self._get_bottom_frame()
-        # place frames into the window
-        self.top_frame.pack(side = tk.TOP, fill = 'x')
-        self.button_frame.pack(side = tk.TOP, fill = 'x')
-        self.filter_frame.pack(side = tk.TOP, fill = 'x')
-        self.bottom_frame.pack(side = tk.BOTTOM, expand = True, fill = 'both')
-        # create some standard dicts
+        central = QWidget()
+        self.setCentralWidget(central)
+        root_layout = QVBoxLayout(central)
+        root_layout.setSpacing(0)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.top_frame    = self._get_top_frame()
+        self.button_frame = self._get_button_frame()
+        self.filter_frame = self._get_filter_frame()
+        self.bottom_frame = self._get_bottom_frame()
+
+        root_layout.addWidget(self.top_frame)
+        root_layout.addWidget(self.button_frame)
+        root_layout.addWidget(self.filter_frame)
+        root_layout.addWidget(self.bottom_frame, stretch=1)
+
         self._create_standard_values()
-        
-        # start the app with the show critical material option
+
         self.disabled_button = self.button_krit_mat
         fc.show_critical_material(self)
-    
+
     def _create_standard_values(self) -> None:
-        # tags for the parents in the Treeview widget
-        self.output_listbox.tag_configure('green', background='forest green', foreground = 'white', font = 'Verdana 11 bold')
-        self.output_listbox.tag_configure('bundle_head', background='grey65', foreground = 'black', font = 'Verdana 11 bold')
-        self.output_listbox.tag_configure('bundle', background='grey80', foreground = 'black', font = 'Verdana 11')
-        self.output_listbox.tag_configure('red_font', background = 'black', foreground = 'orange red')
-        self.output_listbox.tag_configure('green_font', background = 'black', foreground = 'forest green')
-        # some useful dicts
-        self.threshhold_dict = defaultdict(int) 
-        self.recommended_amount_dict = defaultdict(int) 
-        self.materialnames_dict = defaultdict(str)
-        self.units_dict = defaultdict(str)
-        self.deprecated_dict = defaultdict(str)
-        materials = self.cursor.execute("SELECT * FROM Standardmaterial UNION SELECT * FROM Kleinstmaterial").fetchall()
-        deprecated_materials = self.cursor.execute("SELECT * FROM Veraltetes_Material").fetchall()
+        # Row-tag colours for the QTreeWidget are applied via item data roles
+        # (see _set_row_tag / tag_configure wrappers below).
+        self.tag_styles: dict[str, dict] = {
+            'green':      {'bg': QColor('forest green'), 'fg': QColor('white'),
+                           'font': QFont('Verdana', 11, QFont.Weight.Bold)},
+            'bundle_head':{'bg': QColor('#A6A6A6'),       'fg': QColor('black'),
+                           'font': QFont('Verdana', 11, QFont.Weight.Bold)},
+            'bundle':     {'bg': QColor('#CCCCCC'),       'fg': QColor('black'),
+                           'font': QFont('Verdana', 11)},
+            'red_font':   {'bg': QColor('black'),         'fg': QColor('orange red'),
+                           'font': QFont('Verdana', 11)},
+            'green_font': {'bg': QColor('black'),         'fg': QColor('forest green'),
+                           'font': QFont('Verdana', 11)},
+        }
+
+        self.threshhold_dict        = defaultdict(int)
+        self.recommended_amount_dict= defaultdict(int)
+        self.materialnames_dict     = defaultdict(str)
+        self.units_dict             = defaultdict(str)
+        self.deprecated_dict        = defaultdict(str)
+
+        materials = self.cursor.execute(
+            "SELECT * FROM Standardmaterial UNION SELECT * FROM Kleinstmaterial"
+        ).fetchall()
+        deprecated_materials = self.cursor.execute(
+            "SELECT * FROM Veraltetes_Material"
+        ).fetchall()
+
         self.correction_dict = defaultdict(int)
-        correction_data = self.cursor.execute("SELECT * FROM Jahresinventur_Korrekturdaten")
-        for row in correction_data:
+        for row in self.cursor.execute("SELECT * FROM Jahresinventur_Korrekturdaten"):
             self.correction_dict[row['MatNr']] += row['Menge']
+
         for row in materials:
-            self.threshhold_dict[row['MatNr']] = row['Grenzwert']
+            self.threshhold_dict[row['MatNr']]         = row['Grenzwert']
             self.recommended_amount_dict[row['MatNr']] = row['Auffüllen']
-            self.materialnames_dict[row['MatNr']] = row['Bezeichnung']
-            self.units_dict[row['MatNr']] = row['Einheit']
+            self.materialnames_dict[row['MatNr']]      = row['Bezeichnung']
+            self.units_dict[row['MatNr']]              = row['Einheit']
         for row in deprecated_materials:
-              self.deprecated_dict[row['MatNr']] = row['Bezeichnung']
-        standard_materials = self.cursor.execute("SELECT * FROM Standardmaterial").fetchall()
-        self.standard_materials = [material['MatNr'] for material in standard_materials]
-        small_materials = self.cursor.execute("SELECT * FROM Kleinstmaterial").fetchall()
-        self.small_materials = [material['MatNr'] for material in small_materials]
-        
-      
-        self.columns_dict = {'Adresse' : (800, 'w'),
-                             'Auffüllen': (80, 'center'),
-                             'Bedarfsmenge': (110, 'center'),
-                             'Bemerkungen': (1000, 'w'),
-                             'Bestand': (80, 'e'),
-                             'bestellt': (80,'center'),
-                             'Bezeichnung': (400, 'w'),
-                             'Datum': (200, 'center'),
-                             'Einheit': (60, 'w'),
-                             'empfohlene Menge': (130, 'center'),
-                             'Grenzwert': (80, 'center'),
-                             'ID':(80,'e'),
-                             'LAST_COLUMN':(50,'center'),
-                             'Lieferschein':(150, 'center'),
-                             'Materialbeleg': (150,'center'),
-                             'MatNr': (110,'center'),
-                             'MatNr.': (110, 'center'),
-                             'Menge':(80, 'e'),
-                             'Menge ':(80, 'center'),
-                             'Nr.': (80, 'e'),
-                             'Position': (80,'center'),
-                             'Pos.Typ': (60,'center'),
-                             'PosTyp': (60, 'center'),
-                             'SD Beleg': (150, 'center'),
-                             'SD_Beleg': (150,'center'),
-                             'SM Nummer': (110, 'center'),
-                             'SM_Nummer': (110, 'center'),
-                             'SM Nummer / ID': (120, 'center'),
-                             'Umbuchungsmenge': (140, 'center'),
-                             'VPSZ' : (200, 'e'),
-                             'Warenausgangsmenge': (160, 'center'),
-                             }
+            self.deprecated_dict[row['MatNr']] = row['Bezeichnung']
 
-        # these dicts control the output and the filter settings in ADMIN - Deletion Mode 
-        # depending on the selection in the combobox
-        self.execution_dict = {'Kleinstmaterial' : ('SELECT * FROM Kleinstmaterial WHERE MatNr LIKE ?', r'%matnr%,'),
-                               'Standardmaterial' : ('SELECT * FROM Standardmaterial WHERE Matnr LIKE ?', r'%matnr%,'),
-                               'Warenausgabe_Comline' :('SELECT * FROM Warenausgabe_Comline WHERE SM_Nummer LIKE ? AND MatNr LIKE ?', r'%sm%,%matnr%'),
-                               'Warenausgang' : ('SELECT * FROM Warenausgang WHERE SM_Nummer LIKE ? AND MatNr LIKE ?', r'%sm%,%matnr%'),
-                               'Wareneingang' : ('SELECT * FROM Wareneingang WHERE ID LIKE ?', r'%posnr%,'),
-                               'Warenausgang_Kleinstmaterial_ohne_SM_Bezug':('SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE ID LIKE ?', r'%posnr%,'),
-                               'Adresszuordnung' : ('SELECT * FROM Adresszuordnung WHERE SM_Nummer LIKE ?', r'%sm%,'),
-                               'Veraltetes_Material' : ('SELECT * FROM Veraltetes_Material WHERE MatNr LIKE ?', r'%matnr%,'),
-                               'Jahresinventur_Korrekturdaten' : ('SELECT * FROM Jahresinventur_Korrekturdaten WHERE MatNr LIKE ?', r'%matnr%,'),
-                               }
-        # festlegen, welche Eingabefelder aktiviert und deaktiviert sein sollen (Datenbank: [aktiviert], [deaktiviert])
-        self.filter_dict = {'Kleinstmaterial' : ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
-                            'Standardmaterial' : ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
-                            'Warenausgabe_Comline' : ([self.matnr_entry, self.sm_entry], [self.posnr_entry]),
-                            'Warenausgang' : ([self.matnr_entry, self.sm_entry], [self.posnr_entry]),
-                            'Wareneingang' : ([self.posnr_entry], [self.sm_entry, self.matnr_entry]),
-                            'Warenausgang_Kleinstmaterial_ohne_SM_Bezug': ([self.posnr_entry], [self.sm_entry, self.matnr_entry]),
-                            'Adresszuordnung' : ([self.sm_entry], [self.posnr_entry, self.matnr_entry]),
-                            'Veraltetes_Material' : ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
-                            'Jahresinventur_Korrekturdaten' : ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
+        standard_materials = self.cursor.execute(
+            "SELECT * FROM Standardmaterial"
+        ).fetchall()
+        self.standard_materials = [m['MatNr'] for m in standard_materials]
+        small_materials = self.cursor.execute(
+            "SELECT * FROM Kleinstmaterial"
+        ).fetchall()
+        self.small_materials = [m['MatNr'] for m in small_materials]
 
-                            }
-        
-        self.deletion_dict = { 'Kleinstmaterial' : ('DELETE FROM Kleinstmaterial WHERE MatNr = ?', 'matnr,'),
-                               'Standardmaterial' : ('DELETE FROM Standardmaterial WHERE Matnr = ?', 'matnr,'),
-                               'Warenausgabe_Comline' :('DELETE FROM Warenausgabe_Comline WHERE SM_Nummer = ? AND Position = ?', 'sm,posnr'),
-                               'Warenausgang' : ('DELETE FROM Warenausgang WHERE SM_Nummer = ? AND Position = ?', 'sm,posnr'),
-                               'Wareneingang' : ('DELETE FROM Wareneingang WHERE ID = ?', 'posnr,'),
-                               'Warenausgang_Kleinstmaterial_ohne_SM_Bezug':('DELETE FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE ID = ?', 'posnr,'),
-                               'Adresszuordnung' : ('DELETE FROM Adresszuordnung WHERE SM_Nummer = ?', 'sm,'),
-                               'Veraltetes_Material' : ('DELETE FROM Veraltetes_Material WHERE ID = ?', 'posnr,'),
-                               'Jahresinventur_Korrekturdaten' : ('DELETE FROM Jahresinventur_Korrekturdaten WHERE ID = ?', 'posnr,'),
-                               }
+        self.columns_dict = {
+            'Adresse':                          (800, Qt.AlignmentFlag.AlignLeft),
+            'Auffüllen':                        (80,  Qt.AlignmentFlag.AlignCenter),
+            'Bedarfsmenge':                     (110, Qt.AlignmentFlag.AlignCenter),
+            'Bemerkungen':                      (1000,Qt.AlignmentFlag.AlignLeft),
+            'Bestand':                          (80,  Qt.AlignmentFlag.AlignRight),
+            'bestellt':                         (80,  Qt.AlignmentFlag.AlignCenter),
+            'Bezeichnung':                      (400, Qt.AlignmentFlag.AlignLeft),
+            'Datum':                            (200, Qt.AlignmentFlag.AlignCenter),
+            'Einheit':                          (60,  Qt.AlignmentFlag.AlignLeft),
+            'empfohlene Menge':                 (130, Qt.AlignmentFlag.AlignCenter),
+            'Grenzwert':                        (80,  Qt.AlignmentFlag.AlignCenter),
+            'ID':                               (80,  Qt.AlignmentFlag.AlignRight),
+            'LAST_COLUMN':                      (50,  Qt.AlignmentFlag.AlignCenter),
+            'Lieferschein':                     (150, Qt.AlignmentFlag.AlignCenter),
+            'Materialbeleg':                    (150, Qt.AlignmentFlag.AlignCenter),
+            'MatNr':                            (110, Qt.AlignmentFlag.AlignCenter),
+            'MatNr.':                           (110, Qt.AlignmentFlag.AlignCenter),
+            'Menge':                            (80,  Qt.AlignmentFlag.AlignRight),
+            'Menge ':                           (80,  Qt.AlignmentFlag.AlignCenter),
+            'Nr.':                              (80,  Qt.AlignmentFlag.AlignRight),
+            'Position':                         (80,  Qt.AlignmentFlag.AlignCenter),
+            'Pos.Typ':                          (60,  Qt.AlignmentFlag.AlignCenter),
+            'PosTyp':                           (60,  Qt.AlignmentFlag.AlignCenter),
+            'SD Beleg':                         (150, Qt.AlignmentFlag.AlignCenter),
+            'SD_Beleg':                         (150, Qt.AlignmentFlag.AlignCenter),
+            'SM Nummer':                        (110, Qt.AlignmentFlag.AlignCenter),
+            'SM_Nummer':                        (110, Qt.AlignmentFlag.AlignCenter),
+            'SM Nummer / ID':                   (120, Qt.AlignmentFlag.AlignCenter),
+            'Umbuchungsmenge':                  (140, Qt.AlignmentFlag.AlignCenter),
+            'VPSZ':                             (200, Qt.AlignmentFlag.AlignRight),
+            'Warenausgangsmenge':               (160, Qt.AlignmentFlag.AlignCenter),
+        }
 
+        self.execution_dict = {
+            'Kleinstmaterial':
+                ('SELECT * FROM Kleinstmaterial WHERE MatNr LIKE ?', r'%matnr%,'),
+            'Standardmaterial':
+                ('SELECT * FROM Standardmaterial WHERE Matnr LIKE ?', r'%matnr%,'),
+            'Warenausgabe_Comline':
+                ('SELECT * FROM Warenausgabe_Comline WHERE SM_Nummer LIKE ? AND MatNr LIKE ?', r'%sm%,%matnr%'),
+            'Warenausgang':
+                ('SELECT * FROM Warenausgang WHERE SM_Nummer LIKE ? AND MatNr LIKE ?', r'%sm%,%matnr%'),
+            'Wareneingang':
+                ('SELECT * FROM Wareneingang WHERE ID LIKE ?', r'%posnr%,'),
+            'Warenausgang_Kleinstmaterial_ohne_SM_Bezug':
+                ('SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE ID LIKE ?', r'%posnr%,'),
+            'Adresszuordnung':
+                ('SELECT * FROM Adresszuordnung WHERE SM_Nummer LIKE ?', r'%sm%,'),
+            'Veraltetes_Material':
+                ('SELECT * FROM Veraltetes_Material WHERE MatNr LIKE ?', r'%matnr%,'),
+            'Jahresinventur_Korrekturdaten':
+                ('SELECT * FROM Jahresinventur_Korrekturdaten WHERE MatNr LIKE ?', r'%matnr%,'),
+        }
 
+        self.filter_dict = {
+            'Kleinstmaterial':
+                ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
+            'Standardmaterial':
+                ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
+            'Warenausgabe_Comline':
+                ([self.matnr_entry, self.sm_entry], [self.posnr_entry]),
+            'Warenausgang':
+                ([self.matnr_entry, self.sm_entry], [self.posnr_entry]),
+            'Wareneingang':
+                ([self.posnr_entry], [self.sm_entry, self.matnr_entry]),
+            'Warenausgang_Kleinstmaterial_ohne_SM_Bezug':
+                ([self.posnr_entry], [self.sm_entry, self.matnr_entry]),
+            'Adresszuordnung':
+                ([self.sm_entry], [self.posnr_entry, self.matnr_entry]),
+            'Veraltetes_Material':
+                ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
+            'Jahresinventur_Korrekturdaten':
+                ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
+        }
 
+        self.deletion_dict = {
+            'Kleinstmaterial':
+                ('DELETE FROM Kleinstmaterial WHERE MatNr = ?', 'matnr,'),
+            'Standardmaterial':
+                ('DELETE FROM Standardmaterial WHERE Matnr = ?', 'matnr,'),
+            'Warenausgabe_Comline':
+                ('DELETE FROM Warenausgabe_Comline WHERE SM_Nummer = ? AND Position = ?', 'sm,posnr'),
+            'Warenausgang':
+                ('DELETE FROM Warenausgang WHERE SM_Nummer = ? AND Position = ?', 'sm,posnr'),
+            'Wareneingang':
+                ('DELETE FROM Wareneingang WHERE ID = ?', 'posnr,'),
+            'Warenausgang_Kleinstmaterial_ohne_SM_Bezug':
+                ('DELETE FROM Warenausgang_Kleinstmaterial_ohne_SM_Bezug WHERE ID = ?', 'posnr,'),
+            'Adresszuordnung':
+                ('DELETE FROM Adresszuordnung WHERE SM_Nummer = ?', 'sm,'),
+            'Veraltetes_Material':
+                ('DELETE FROM Veraltetes_Material WHERE ID = ?', 'posnr,'),
+            'Jahresinventur_Korrekturdaten':
+                ('DELETE FROM Jahresinventur_Korrekturdaten WHERE ID = ?', 'posnr,'),
+        }
 
-    def _create_styles(self) -> ttk.Style:
-        '''
-        create the style for all widgets 
-        style-maps are used to control the font, color etc. dependent on the status of the widget
-        '''
-        
-        _style = ttk.Style()
-        _style.theme_use('classic') # use theme 'classic' and alter it
-        
-        _style.map('Green.TButton', 
-                    background=[('active','forest green'),('disabled', 'forest green')],
-                    foreground=[('active', 'black'), ('disabled', 'black')],
-                    relief=[('pressed', '!disabled', 'sunken'), ('disabled', 'sunken')],
-                    )
+    # ── Tag helpers (replaces ttk tag_configure / item tags) ─────────
+    # def tag_configure(self, tag: str, **kwargs):
+    #     """No-op – styles are pre-loaded in tag_styles dict."""
+    #     pass  # styles already defined in _create_standard_values
 
-        _style.map('Green2.TButton', 
-                    width = [('disabled', 23)],
-                    justify = [('disabled', tk.CENTER)],
-                    background=[('active','forest green'), ('disabled', 'black')],
-                    foreground=[('active', 'black'), ('disabled', 'black')],
-                    borderwidth = [('disabled', 0)],
-                    relief=[('pressed', '!disabled', 'sunken'),('disabled', 'flat')],
-                    highlightcolor = [('disabled', 'black')]
-                    )
-        
-        _style.map('Blue.TButton', 
-                    background=[('active','deep sky blue'), ('disabled', 'deep sky blue')],
-                    foreground=[('active', 'black'), ('disabled', 'black')],
-                    relief=[('pressed', '!disabled', 'sunken'),('disabled', 'sunken')],
-                    )
-        
-        _style.map('Blue2.TButton', 
-                    background=[('active','deep sky blue'), ('disabled', 'black')],
-                    foreground=[('active', 'black'), ('disabled', 'black')],
-                    borderwidth = [('disabled', 0)],
-                    relief=[('pressed', '!disabled', 'sunken'),('disabled', 'flat')],
-                    highlightcolor = [('disabled', 'black')]
-                    )
+    def apply_tag(self, item: QTreeWidgetItem, tag: str) -> None:
+        """Apply a named tag style to a QTreeWidgetItem (all columns)."""
+        style = self.tag_styles.get(tag)
+        if not style:
+            return
+        col_count = self.output_listbox.columnCount()
+        for col in range(col_count):
+            if 'bg' in style:
+                item.setBackground(col, QBrush(style['bg']))
+            if 'fg' in style:
+                item.setForeground(col, QBrush(style['fg']))
+            if 'font' in style:
+                item.setFont(col, style['font'])
 
-        _style.map('Red.TButton', 
-                    background=[('active','orange red'), ('disabled', 'orange red')],
-                    foreground=[('active', 'black'), ('disabled', 'black')],
-                    relief=[('pressed', '!disabled', 'sunken'), ('disabled', 'sunken')],
-                    )
-        
-        _style.map('Red_Delete.TButton', 
-                    width = [('disabled', 23)],
-                    font = [('disabled', 'Verdana 10')],
-                    justify = [('disabled', tk.CENTER)],
-                    background=[('active','orange red'), ('disabled', 'black')],
-                    foreground=[('active', 'black'), ('disabled', 'black')],
-                    relief=[('pressed', '!disabled', 'sunken'), ('disabled', 'flat')],
-                    borderwidth = [('disabled', 0)],
-                    highlightcolor = [('disabled', 'black')]
-                    )
-    
-        _style.map('Blue.TLabel', 
-                    foreground=[('disabled', 'black')],
-                    background=[('disabled', 'black')],
-                    )
-        
-        _style.map('Green.TEntry', 
-                    fieldbackground = [('disabled', 'grey10')]
-                    )
+    # ── Top frame ────────────────────────────────────────────────────
+    def _get_top_frame(self) -> QFrame:
+        frame = QFrame()
+        frame.setStyleSheet(FRAME2_SS)
+        layout = QHBoxLayout(frame)
 
-        _style.map('Red.TCombobox',
-                    foreground = [('active', 'orange red'), ('disabled', 'black')],
-                    background = [('active', 'black'), ('disabled', 'black')],
-                    borderwidth = [('disabled', 0)],
-                    highlightcolor = [('disabled', 'black')],
-                    fieldbackground = [('disabled', 'black')]
-                    )
-        _style.map('Green.Treeview',
-                   background = [('selected', 'light green')],
-                   foreground = [('selected', 'black')],
-                   )
-    
-        return self._configure_styles(_style)
-        
+        self.label_top = QLabel('Lagerverwaltung Comline')
+        self.label_top.setStyleSheet(GREEN2_LABEL_SS)
+        self.label_top.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-    def _configure_styles(self, _style) -> ttk.Style:
-        '''
-        defines the basic colors, fonts etc for the widgets.
-        '''
-        _style.configure('Blue.TButton', font = 'Verdana 10',foreground = 'deep sky blue', background = 'black', justify = tk.CENTER)
-        _style.configure('Blue.TButton', font = 'Verdana 10',foreground = 'deep sky blue', background = 'black', justify = tk.CENTER)
-        _style.configure('Green2.TButton',  font = 'Verdana 10',foreground = 'forest green', background = 'black', justify = tk.CENTER)
-        _style.configure('Blue2.TButton', font = 'Verdana 10',foreground = 'deep sky blue', background = 'black', justify = tk.CENTER)
-        _style.configure('Red.TButton', font = 'Verdana 10',foreground = 'orange red', background = 'black', justify = tk.CENTER)
-        _style.configure('Red_Delete.TButton', font = 'Verdana 10',foreground = 'orange red', background = 'black', justify = tk.CENTER)
-        _style.configure('Green.TLabel', font ='Verdana 10', foreground = 'forest green', background = 'black')
-        _style.configure('Green2.TLabel', font ='Verdana 10 bold', foreground = 'forest green', background = 'black')
-        _style.configure('Green.TButton',  font = 'Verdana 10',foreground = 'forest green', background = 'black', justify = tk.CENTER)
-        _style.configure('Red.TLabel', font ='Verdana 10 bold', foreground = 'orange red', background = 'black')
-        _style.configure('Blue.TLabel', font ='Verdana 10', foreground = 'deep sky blue', background = 'black')
-        _style.configure('Green.TEntry', font ='Verdana 10 bold', foreground = 'black', fieldbackground = 'white')
-        _style.configure('Frame_grey.TFrame', borderwidth = 2, bordercolor = 'grey', background = 'black', relief = 'groove')
-        _style.configure('Frame_grey2.TFrame', borderwidth =2, background = 'black', relief = 'groove')
-        _style.configure('Frame_filter.TFrame', borderwidth = 2, bordercolor = 'grey', background = 'black', relief = 'groove')
-        _style.configure('Green.TCombobox', background = 'black', foreground = 'forest green', font = 'Verdana 10')
-        _style.configure('Red.TCombobox', background = 'black', foreground = 'orange red', font = 'Verdana 10')
-        _style.configure('Green.Treeview', font = 'Verdana 11', foreground = 'forest green', background = 'black', fieldbackground = 'black', bordercolor='white', borderwidth = 2)
-        _style.configure('Green.Treeview.Heading', background = 'dark green', foreground = 'white', font = 'Verdana 8 bold')
-        _style.configure('Big_Green_Label.TLabel', font = 'Verdana 20 bold', background = 'black', foreground = 'forest_green')
-        # print(_style.layout('Green.Treeview'))
-        # print(_style.element_options('Treeview.field'))
-        # print(_style.element_options('Treeview.padding'))
-        # print(_style.element_options('Treeview.label'))
-        return _style
+        color = FOREST_GREEN if 'Service-Center' in self.path_to_db else ORANGE_RED
+        self.label_top_path_to_db = QLabel(f'Pfad zur Datenbank: {self.path_to_db}')
+        self.label_top_path_to_db.setStyleSheet(
+            f"color:{color};background:{BLACK};font:10pt Verdana; border: 1px solid {color}")
+        self.label_top_path_to_db.setAlignment(Qt.AlignmentFlag.AlignLeft |
+                                                Qt.AlignmentFlag.AlignVCenter)
 
+        self.button_change_db = QPushButton('Pfad ändern')
+        self.button_change_db.setStyleSheet(GREEN_BTN)
+        self.button_change_db.clicked.connect(lambda: fc.change_db_path(self))
 
-    def _get_top_frame(self) -> ttk.Frame:
-        '''
-        the top frame contains: 
-            - the headline
-            - the path to the database (green font when working on the productive db, otherwise red font)
-            - the button to change the path to the database
-        '''
-        _top_frame = ttk.Frame(self.window, style = 'Frame_grey2.TFrame')
-        self.label_top = ttk.Label(_top_frame, 
-                                   style = 'Green2.TLabel', 
-                                   text = 'Lagerverwaltung Comline',
-                                   anchor = 'e')
-        self.label_top_path_to_db = ttk.Label(_top_frame, 
-                                   style = 'Red.TLabel', 
-                                   text = f'Pfad zur Datenbank: {self.path_to_db}',
-                                   anchor = 'w')
-        
-        if 'Service-Center' in self.path_to_db:
-            color = 'forest green'
-        else:
-            color = 'orange red'
-        self.label_top_path_to_db.configure(foreground = color)
-        
-        self.button_change_db = ttk.Button(_top_frame, 
-                                           style = 'Green.TButton',
-                                           text = 'Pfad ändern',
-                                           command = lambda : fc.change_db_path(self)
-                                           )
-        
-        self.button_change_db.pack(side = tk.RIGHT, padx = 50, pady = 5)
-        self.label_top.pack(side = tk.LEFT,padx = 100, pady = 10, fill = 'x', expand = True)
-        self.label_top_path_to_db.pack(side = tk.RIGHT, padx = 10, pady = 10, fill = 'x', expand = True)
-        return _top_frame
+        layout.addWidget(self.label_top, stretch=1)
+        layout.addWidget(self.label_top_path_to_db, stretch=2)
+        layout.addWidget(self.button_change_db)
+        layout.setContentsMargins(10, 5, 50, 5)
+        return frame
 
-        
-    def _get_button_frame(self) -> ttk.Frame:    
-        '''
-        creates the frames and buttons at the top side of the app
-        the left frame contains buttons for all users (STANDARD, EXPERT, ADMIN) (db read only)
-        the middle frame contains buttons for EXPERT and ADMIN (db read and write)
-        the right frame contains buttons only for ADMIN (db read, write and delete)
-        '''
-        _main_button_frame = ttk.Frame(self.window, style = 'Frame_grey.TFrame')
-        _left_button_frame = self._get_left_button_frame(_main_button_frame)
-        _right_button_frame = self._get_right_button_frame(_main_button_frame)
-        _middle_button_frame = self._get_middle_button_frame(_main_button_frame)
-        
-        _left_button_frame.pack(side = tk.LEFT, padx = 5, pady = 5)
+    # ── Button frame ─────────────────────────────────────────────────
+    def _get_button_frame(self) -> QFrame:
+        frame = QFrame()
+        frame.setStyleSheet(FRAME_SS)
+        layout = QHBoxLayout(frame)
+        layout.setSpacing(5)
+        layout.setContentsMargins(5, 5, 5, 5)
+
+        left   = self._get_left_button_frame()
+        middle = self._get_middle_button_frame()
+        right  = self._get_right_button_frame()  # immer aufrufen, damit Widgets existieren
+
+        layout.addWidget(left)
+
+        if self.user in (EXPERT, ADMIN):
+            layout.addWidget(middle)
         if self.user == ADMIN:
-            _right_button_frame.pack(side = tk.RIGHT, padx = 5, pady = 5)
+            layout.addWidget(right)
+
+        layout.addStretch()
+        return frame
+
+    def _get_left_button_frame(self) -> QFrame:
+        frame = QFrame()
+        frame.setStyleSheet(FRAME_SS)
+        layout = QHBoxLayout(frame)
+        layout.setSpacing(5)
+
+        self.button_krit_mat = QPushButton('Kritisches Material\nanzeigen')
+        self.button_krit_mat.setStyleSheet(GREEN_BTN)
+        self.button_krit_mat.clicked.connect(lambda: fc.show_critical_material(self))
+
+        self.button_bestand = QPushButton('Bestand\nanzeigen')
+        self.button_bestand.setStyleSheet(GREEN_BTN)
+        self.button_bestand.clicked.connect(lambda: fc.show_stock(self))
+
+        self.button_wareneingang = QPushButton('Wareneingang\nanzeigen')
+        self.button_wareneingang.setStyleSheet(GREEN_BTN)
+        self.button_wareneingang.clicked.connect(
+            lambda: fc.show_ingoing_material(self))
+
+        self.button_warenausgang = QPushButton('Warenausgang\nanzeigen')
+        self.button_warenausgang.setStyleSheet(GREEN_BTN)
+        self.button_warenausgang.clicked.connect(
+            lambda: fc.show_outgoing_material(self))
+
+        self.button_sm_auftrag = QPushButton('Material für\nSM-Auftrag anzeigen')
+        self.button_sm_auftrag.setStyleSheet(GREEN_BTN)
+        self.button_sm_auftrag.clicked.connect(
+            lambda: fc.show_material_for_order(self))
+
+        for btn in (self.button_krit_mat, self.button_bestand,
+                    self.button_wareneingang, self.button_warenausgang,
+                    self.button_sm_auftrag):
+            layout.addWidget(btn)
+
+        return frame
+
+    def _get_middle_button_frame(self) -> QFrame:
+        frame = QFrame()
+        frame.setStyleSheet(FRAME_SS)
+        layout = QHBoxLayout(frame)
+        layout.setSpacing(5)
+
+        self.button_wareneingang_buchen = QPushButton(
+            'Wareneingang buchen\n(Anlieferung CTDI)')
+        self.button_wareneingang_buchen.setStyleSheet(BLUE_BTN)
+        self.button_wareneingang_buchen.clicked.connect(
+            lambda: fc.book_ingoing_position(self))
+
+        self.button_warenausgang_buchen = QPushButton(
+            'Warenausgang buchen\n(Excel aus PSL)')
+        self.button_warenausgang_buchen.setStyleSheet(BLUE_BTN)
+        self.button_warenausgang_buchen.clicked.connect(
+            lambda: fc.book_outgoing_from_excel_file(self))
+
+        self.button_warenausgang_buchen_Kleinstmaterial = QPushButton(
+            'Warenausgang buchen\n(nur Kleinstmaterial)')
+        self.button_warenausgang_buchen_Kleinstmaterial.setStyleSheet(BLUE_BTN)
+        self.button_warenausgang_buchen_Kleinstmaterial.clicked.connect(
+            lambda: fc.book_outgoing_kleinstmaterial(self))
+
+        for btn in (self.button_wareneingang_buchen,
+                    self.button_warenausgang_buchen,
+                    self.button_warenausgang_buchen_Kleinstmaterial):
+            layout.addWidget(btn)
+
+        return frame
+
+    def _get_right_button_frame(self) -> QFrame:
+        frame = QFrame()
+        frame.setStyleSheet(FRAME_SS)
+        layout = QHBoxLayout(frame)
+        layout.setSpacing(5)
+
+        tables = self.cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table';"
+        ).fetchall()
+        values = [t[0] for t in tables if t[0] != 'sqlite_sequence']
+
+        # Immer erstellen (auch für STANDARD/EXPERT), damit filter_dict
+        # und set_widget_status nie auf ein gelöschtes Objekt stoßen.
+        # Nur für ADMIN wird das Widget ins Layout eingefügt und sichtbar.
+        self.combobox_loeschen = QComboBox()
+        self.combobox_loeschen.setStyleSheet(RED_COMBO_SS)
+        self.combobox_loeschen.setMinimumWidth(300)
+        self.combobox_loeschen.addItems(values)
+        self.combobox_loeschen.setCurrentIndex(0)
+
+        self.button_loeschen = QPushButton('Einträge aus\nDatenbank löschen')
+        self.button_loeschen.setStyleSheet(RED_BTN)
+        self.button_loeschen.clicked.connect(
+            lambda: fc.filter_entries_to_delete(self))
+
         if self.user == ADMIN:
-            _middle_button_frame.pack(side = tk.TOP, padx = 5, pady = 5)
-        elif self.user == EXPERT:
-            _middle_button_frame.pack(side = tk.LEFT, padx = 5, pady = 5)
-        
-        return _main_button_frame
-    
-    def _get_left_button_frame(self, _main_button_frame:ttk.Frame) -> ttk.Frame:
-        _left_button_frame = ttk.Frame(_main_button_frame, style = 'Frame_grey.TFrame')
-        self.button_krit_mat = ttk.Button(_left_button_frame, 
-                                    style = 'Green.TButton', 
-                                    text = 'Kritisches Material \nanzeigen', 
-                                    command = lambda: fc.show_critical_material(self)
-                                    )
-        self.button_bestand = ttk.Button(_left_button_frame, 
-                                    style = 'Green.TButton', 
-                                    text = 'Bestand\nanzeigen', 
-                                    command = lambda:fc.show_stock(self)
-                                    )
-        self.button_wareneingang = ttk.Button(_left_button_frame, 
-                                              style = 'Green.TButton', 
-                                              text = 'Wareneingang\nanzeigen',
-                                              command = lambda:fc.show_ingoing_material(self)
-                                              )
-        self.button_warenausgang = ttk.Button(_left_button_frame, 
-                                              style = 'Green.TButton', 
-                                              text = 'Warenausgang\nanzeigen',
-                                              command = lambda:fc.show_outgoing_material(self)
-                                              )
-        self.button_sm_auftrag = ttk.Button(_left_button_frame,
-                                            style = 'Green.TButton',
-                                            text = 'Material für\nSM-Auftrag anzeigen',
-                                            command = lambda:fc.show_material_for_order(self)
-                                            )
-        
-        self.button_krit_mat.pack(side = tk.LEFT, padx = 5, pady = 5)
-        self.button_bestand.pack(side = tk.LEFT, padx = 5, pady = 5)
-        self.button_wareneingang.pack(side = tk.LEFT, padx = 5, pady = 5)
-        self.button_warenausgang.pack(side = tk.LEFT, padx = 5, pady = 5)
-        self.button_sm_auftrag.pack(side = tk.LEFT, padx = 5, pady = 5)
-        return _left_button_frame
-        
+            layout.addWidget(self.button_loeschen)
+            layout.addWidget(self.combobox_loeschen)
 
-    def _get_right_button_frame(self, _main_button_frame:ttk.Frame) -> ttk.Frame:
-        # ADMIN Knopf und Combobox
-        _right_button_frame = ttk.Frame(_main_button_frame, style = 'Frame_grey.TFrame')
-        tables = self.cursor.execute("SELECT name FROM sqlite_master WHERE type ='table';").fetchall()
-        values = [table[0] for table in tables if table[0] != 'sqlite_sequence']
-        self.combobox_loeschen = ttk.Combobox(_right_button_frame, 
-                                                style = 'Red.TCombobox',
-                                                width = 50, 
-                                                values = values
-                                                )
-        self.combobox_loeschen.current(0)
-        self.button_loeschen = ttk.Button(_right_button_frame, 
-                                            style = 'Red.TButton', 
-                                            text = 'Einträge aus \nDatenbank löschen',
-                                            command  = lambda: fc.filter_entries_to_delete(self))
-        self.button_loeschen.pack(side = tk.LEFT, padx = 5, pady = 5)
-        self.combobox_loeschen.pack(side = tk.LEFT, padx = 5, pady = 5)
-        return _right_button_frame
-        
-        
-    def _get_middle_button_frame(self, _main_button_frame:ttk.Frame) -> ttk.Frame:
-        _middle_button_frame = ttk.Frame(_main_button_frame, style = 'Frame_grey.TFrame')
-        self.button_wareneingang_buchen = ttk.Button(_middle_button_frame, 
-                                                        style = 'Blue.TButton', 
-                                                        text = 'Wareneingang buchen\n(Anlieferung CTDI)',
-                                                        command = lambda:fc.book_ingoing_position(self))
-        self.button_warenausgang_buchen = ttk.Button(_middle_button_frame, 
-                                                        style = 'Blue.TButton', 
-                                                        text = 'Warenausgang buchen\n(Excel aus PSL)',
-                                                        command = lambda: fc.book_outgoing_from_excel_file(self))
-        self.button_warenausgang_buchen_Kleinstmaterial = ttk.Button(_middle_button_frame, 
-                                                        style = 'Blue.TButton', 
-                                                        text = 'Warenausgang buchen\n(nur Kleinstmaterial)',
-                                                        command = lambda: fc.book_outgoing_kleinstmaterial(self))
-        self.button_wareneingang_buchen.pack(side = tk.LEFT, padx = 5, pady = 5)
-        self.button_warenausgang_buchen.pack(side = tk.LEFT, padx = 5, pady = 5)
-        self.button_warenausgang_buchen_Kleinstmaterial.pack(side = tk.LEFT, padx = 5, pady = 5)
-        return _middle_button_frame
+        return frame
 
-        
+    # ── Filter frame ─────────────────────────────────────────────────
+    def _get_filter_frame(self) -> QFrame:
+        frame = QFrame()
+        frame.setStyleSheet(FRAME_SS)
+        layout = QHBoxLayout(frame)
+        layout.setSpacing(5)
+        layout.setContentsMargins(5, 5, 5, 5)
 
-    def _get_filter_frame(self) -> ttk.Frame:
-        '''
-        the filter frame contains:
-            - entry for materialnumber
-            - entry for work order number
-            - entry for position / id number (only in ADMIN mode)
-        '''
-        _filter_frame = ttk.Frame(self.window, style = 'Frame_filter.TFrame')
-        
-        # these filters are always present
-        self.matnr_label = ttk.Label(_filter_frame, style = 'Green.TLabel', text = ' Daten filtern:     Materialnummer:')
-        self.matnr_entry = ttk.Entry(_filter_frame, style = 'Green.TEntry')
-        self.sm_label = ttk.Label(_filter_frame, style = 'Green.TLabel', text = 'SM Nummer:')
-        self.sm_entry = ttk.Entry(_filter_frame, style = 'Green.TEntry')
-        
-        self.matnr_label.pack(side = tk.LEFT, padx = 5, pady = 5)
-        self.matnr_entry.pack(side = tk.LEFT, padx = 5, pady = 5)
-        self.sm_label.pack(side = tk.LEFT, padx = 5, pady = 5)
-        self.sm_entry.pack(side = tk.LEFT, padx = 5, pady = 5)
-        
-        # this button and label is only shown in ADMIN mode
-        self.posnr_entry = ttk.Entry(_filter_frame, style = 'Green.TEntry')
+        matnr_label = QLabel(' Daten filtern:     Materialnummer:')
+        matnr_label.setStyleSheet(GREEN_LABEL_SS)
+        self.matnr_entry = QLineEdit()
+        self.matnr_entry.setStyleSheet(GREEN_ENTRY_SS)
+
+        sm_label = QLabel('SM Nummer:')
+        sm_label.setStyleSheet(GREEN_LABEL_SS)
+        self.sm_entry = QLineEdit()
+        self.sm_entry.setStyleSheet(GREEN_ENTRY_SS)
+
+        # posnr_entry always created; only shown for ADMIN
+        self.posnr_entry = QLineEdit()
+        self.posnr_entry.setStyleSheet(GREEN_ENTRY_SS)
+
+        layout.addWidget(matnr_label)
+        layout.addWidget(self.matnr_entry)
+        layout.addWidget(sm_label)
+        layout.addWidget(self.sm_entry)
+
         if self.user == ADMIN:
-            self.posnr_label = ttk.Label(_filter_frame, style = 'Green.TLabel', text = 'Position / ID:')
-            self.posnr_label.pack(side = tk.LEFT, padx = 5, pady = 10)
-            self.posnr_entry.pack(side = tk.LEFT, padx = 5, pady = 10)
-        
-        return _filter_frame
-        
+            posnr_label = QLabel('Position / ID:')
+            posnr_label.setStyleSheet(GREEN_LABEL_SS)
+            layout.addWidget(posnr_label)
+            layout.addWidget(self.posnr_entry)
 
-    def _get_bottom_frame(self) -> ttk.Frame:
-        '''
-        bottom frame contains:
-            - button to toggle order status
-            - button to print on standard printer
-            - button to delete entries from database
-            - textbox to show the filtered data from the underlying sqlite3 database
-        '''
-        
-        _bottom_frame = ttk.Frame(self.window, style = 'Frame_grey.TFrame', padding = 10)
-        # creates buttons and label at the bottom of the bottom frame
-        self.entry_frame = ttk.Frame(self.window, style = 'Frame_grey.TFrame')
-        self.bestellt_label = ttk.Label(self.entry_frame, 
-                                        style = 'Blue.TLabel', 
-                                        text = 'Materialnummer markieren um den Bestellstatus zu wechseln'
-                                        )
-        self.bestellt_button = ttk.Button(self.entry_frame, 
-                                            style = 'Blue2.TButton', 
-                                            text = 'Bestellstatus ändern',
-                                            command = lambda:fc.toggle_ordered_status(self)
-                                            )
-        self.print_button = ttk.Button(self.entry_frame, 
-                                            style = 'Green2.TButton', 
-                                            text = 'Drucken',
-                                            command = lambda:fc.print_screen(self)
-                                            )
-        self.delete_button = ttk.Button(self.entry_frame, 
-                                            style = 'Red_Delete.TButton', 
-                                            text = 'angezeigte Daten loeschen',
-                                            command = lambda:fc.delete_selected_entries(self)
-                                            )
-        
+        layout.addStretch()
+        return frame
+
+    # ── Bottom frame ─────────────────────────────────────────────────
+    def _get_bottom_frame(self) -> QFrame:
+        outer = QFrame()
+        outer.setStyleSheet(FRAME_SS)
+        outer_layout = QVBoxLayout(outer)
+        outer_layout.setSpacing(0)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+
+        # ── treeview (output_listbox) ────────────────────────────────
+        self.output_listbox = QTreeWidget()
+        self.output_listbox.setStyleSheet(TREE_SS)
+        self.output_listbox.setSelectionMode(
+            QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.output_listbox.setAlternatingRowColors(False)
+        self.output_listbox.header().setSectionResizeMode(
+            QHeaderView.ResizeMode.Interactive)
+
+        outer_layout.addWidget(self.output_listbox, stretch=1)
+
+        # ── bottom button bar ────────────────────────────────────────
+        self.entry_frame = QFrame()
+        self.entry_frame.setStyleSheet(f"background:{BLACK};")
+        btn_layout = QHBoxLayout(self.entry_frame)
+        btn_layout.setSpacing(10)
+        btn_layout.setContentsMargins(5, 5, 5, 5)
+
+        self.bestellt_label = QLabel(
+            'Materialnummer markieren um den Bestellstatus zu wechseln')
+        self.bestellt_label.setStyleSheet(BLUE_LABEL_SS)
+
+        self.bestellt_button = QPushButton('Bestellstatus ändern')
+        self.bestellt_button.setStyleSheet(BLUE_BTN)
+        self.bestellt_button.clicked.connect(lambda: fc.toggle_ordered_status(self))
+
+        self.print_button = QPushButton('Drucken')
+        self.print_button.setStyleSheet(GREEN_BTN)
+        self.print_button.clicked.connect(lambda: fc.print_screen(self))
+
+        self.delete_button = QPushButton('angezeigte Daten loeschen')
+        self.delete_button.setStyleSheet(RED_BTN)
+        self.delete_button.clicked.connect(lambda: fc.delete_selected_entries(self))
+
         if self.user in (ADMIN, EXPERT):
-            self.bestellt_label.pack(side = tk.LEFT, padx = 50, pady = 5)
-            self.bestellt_button.pack(side = tk.LEFT, padx = 50, pady = 5)
-        if self.user == STANDARD:
-               self.print_button.pack(side = tk.TOP, pady = 5)
-        else:
-               self.print_button.pack(side = tk.LEFT, pady = 5)
-        if self.user == ADMIN:    
-            self.delete_button.pack(side = tk.LEFT, pady = 5)
-            
-        self.entry_frame.pack(side = tk.BOTTOM, fill = 'x')
-        
-        # create the output window using a treeview widget
-        self.output_listbox = ttk.Treeview(_bottom_frame, 
-                                           style = 'Green.Treeview',
-                                           show='tree headings', 
-                                           selectmode='extended'
-                                           )
-        
-        self.vertical_scrollbar = ttk.Scrollbar(_bottom_frame, orient = tk.VERTICAL, command = self.output_listbox.yview)
-        self.horizontal_scrollbar = ttk.Scrollbar(_bottom_frame, orient = tk.HORIZONTAL, command = self.output_listbox.xview)
-        self.vertical_scrollbar.pack(side = tk.RIGHT,  fill = 'y')
-        self.horizontal_scrollbar.pack(side = tk.BOTTOM,  fill = 'x')
+            btn_layout.addWidget(self.bestellt_label, alignment = Qt.AlignmentFlag.AlignLeft)
+            btn_layout.addWidget(self.bestellt_button, alignment = Qt.AlignmentFlag.AlignHCenter)
 
-        self.output_listbox.configure(yscrollcommand = self.vertical_scrollbar.set,
-                                      xscrollcommand = self.horizontal_scrollbar.set)
-        self.output_listbox.pack(side = tk.LEFT,  expand = True, fill = 'both')
-        self.output_listbox.bind("<MouseWheel>", self.on_treeview_scroll)
-        return _bottom_frame
-    
-    def on_treeview_scroll(self, event):
-        # increases the vertical scrollspeed, because the standard speed is awfully slow :)
-        scroll_speed = 10  # Multiplicator
-        self.output_listbox.yview_scroll(int(-1*(event.delta/120)*scroll_speed), "units")
+        btn_layout.addWidget(self.print_button, stretch = 1, alignment = Qt.AlignmentFlag.AlignHCenter)
 
+        if self.user == ADMIN:
+            btn_layout.addWidget(self.delete_button)
 
-    def open_booking_window(self, title, selection):
-        '''
-        creates the frontend when booking ingoing or outgoing material
+        btn_layout.addStretch()
+        outer_layout.addWidget(self.entry_frame)
+        return outer
 
-        conntains:
-            - a simple label
-            - combobox for material selection
-            - entry for amount 
-            - button to book the material
-        '''
+    # ── Scroll speed (replaces on_treeview_scroll) ───────────────────
+    def wheelEvent(self, event):
+        """Increase vertical scroll speed for the treeview."""
+        scroll_speed = 10
+        sb = self.output_listbox.verticalScrollBar()
+        delta = -int(event.angleDelta().y() / 120) * scroll_speed
+        sb.setValue(sb.value() + delta)
+
+    # ── Booking window ───────────────────────────────────────────────
+    def open_booking_window(self, title: str, selection: str) -> None:
+        """
+        Creates the booking window for ingoing / outgoing material.
+        Replaces the Tkinter Toplevel + mainloop pattern with a modal QDialog.
+        """
         self.user_closed_window = True
         self.cursor.execute(selection)
         materials = self.cursor.fetchall()
         values = [f"{row['MatNr']} {row['Bezeichnung']}" for row in materials]
-        self.ingoing_mat_string_var = tk.StringVar()
-        self.ingoing_menge_var = tk.IntVar()
-        self.ingoing_window = tk.Toplevel(master = self.window)
-        self.ingoing_window.protocol("WM_DELETE_WINDOW", lambda : [self.ingoing_window.quit(), self.ingoing_window.destroy()])
-        
-        self.ingoing_window.minsize(500,200)
-        self.ingoing_window.configure(bg = 'black')
-        
-        
-        self.ueberschrift_frame = ttk.Frame(self.ingoing_window, border = 1)
-        self.title_label = ttk.Label(self.ueberschrift_frame,
-                                            style = 'Green.TLabel',
-                                            anchor = tk.CENTER,
-                                            text = f'\n{title}',
-                                            font = 'Verdana 12 bold',
-                                            foreground = 'orange red'
-                                            )
-        self.ueberschrift_label = ttk.Label(self.ueberschrift_frame,
-                                            style = 'Green.TLabel',
-                                            anchor = tk.CENTER,
-                                            text = '\nBitte Material aus Dropdown Menü wählen und Menge eingeben.\n'
-                                            )
-        self.mat_frame = ttk.Frame(self.ingoing_window)
-        self.mat_label = ttk.Label(self.mat_frame,
-                                       style = 'Green.TLabel',
-                                       anchor = tk.CENTER,
-                                       text = 'Material')
-        self.title_label.pack(side = tk.TOP, fill = 'x')
-        self.ueberschrift_label.pack(side = tk.TOP, fill = 'x')
 
-        self.matnr_combobox = AutocompleteCombobox(self.mat_frame,
-                                           style = 'Green.TCombobox',
-                                           width = 60,
-                                           textvariable=self.ingoing_mat_string_var)
-        self.matnr_combobox.set_completion_list(values)
-        self.matnr_combobox.current(0)
-        self.matnr_combobox.select_range(0,tk.END)
-        self.mat_label.pack(side = tk.TOP, fill = 'x')
-        self.matnr_combobox.pack(side = tk.TOP, fill = 'x')
-        self.menge_frame = ttk.Frame(self.ingoing_window)
-        self.stck_label = ttk.Label(self.menge_frame,
-                                       style = 'Green.TLabel',
-                                       anchor = tk.CENTER,
-                                       text = 'Menge')
-        self.stck_entry = ttk.Entry(self.menge_frame,
-                                    style = 'Green.TEntry',
-                                    textvariable=self.ingoing_menge_var)
-        self.ok_button = ttk.Button(self.ingoing_window,
-                                    style = 'Blue.TButton',
-                                    text = 'buchen',
-                                    command = lambda : fc.confirm_user_input(self))
-        self.stck_label.pack(side = tk.TOP, fill = 'x')
-        self.stck_entry.pack(side = tk.TOP, fill = 'x')
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.setModal(True)
+        dialog.setMinimumSize(500, 200)
+        dialog.setStyleSheet(f"background:{BLACK};")
 
-        self.stck_entry.bind('<Return>', lambda _ : fc.confirm_user_input(self))
+        layout = QVBoxLayout(dialog)
 
-        self.ueberschrift_frame.pack(side = tk.TOP, padx = 10, pady = 5, fill = 'x')
-        self.ok_button.pack(side = tk.BOTTOM, fill = 'x', padx = 10, pady = 10)
-        self.mat_frame.pack(side = tk.LEFT, padx = 10)    
-        self.menge_frame.pack(side = tk.LEFT, padx = 10)
-        self.matnr_combobox.focus()
-        self.ingoing_window.mainloop()
+        # Title label
+        self.title_label = QLabel(f'\n{title}')
+        self.title_label.setStyleSheet(RED_LABEL_SS + 'font:bold 12pt Verdana;')
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+        self.ueberschrift_label = QLabel(
+            '\nBitte Material aus Dropdown Menü wählen und Menge eingeben.\n')
+        self.ueberschrift_label.setStyleSheet(GREEN_LABEL_SS)
+        self.ueberschrift_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-    def InputBox(self, mat_number, mat_name):        
-        dialog = tk.Toplevel(self.window)
-        
+        layout.addWidget(self.title_label)
+        layout.addWidget(self.ueberschrift_label)
 
-        frame = ttk.Frame(dialog, style = 'Frame_grey.TFrame', border = 1)
-        frame.pack()
+        content_layout = QHBoxLayout()
 
-        mat_label = ttk.Label(frame, style = 'Green.TLabel', text = f"{mat_number} {mat_name}")
-        mat_label.pack(side = tk.TOP, padx = 10, pady = 10)
-        label_2 = ttk.Label(frame, style = 'Green.TLabel', text = 'bestellte Menge?')
-        label_2.pack(side = tk.TOP, padx = 10, pady = 10)
+        # Material selection
+        mat_frame = QFrame()
+        mat_layout = QVBoxLayout(mat_frame)
+        self.mat_label = QLabel('Material')
+        self.mat_label.setStyleSheet(GREEN_LABEL_SS)
+        self.mat_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        entry = ttk.Entry(frame, style = 'Green.TEntry')
-        entry.pack(side = tk.TOP, padx = 10, pady = 10)
-        entry.bind('<Return>', lambda _ : self.DialogResult(entry.get(), dialog))
+        #self.matnr_combobox = AutocompleteComboBox()
+        self.matnr_combobox = QComboBox()
+        self.matnr_combobox.setEditable(True)
+        self.matnr_combobox.setStyleSheet(GREEN_COMBO_SS)
+        self.matnr_combobox.setMinimumWidth(400)
+        #self.matnr_combobox.set_completion_list(values)
+        self.matnr_combobox.addItems(values)
 
-        submit = ttk.Button(frame, style = 'Blue.TButton', text='OK', command=lambda: self.DialogResult(entry.get(), dialog))
-        submit.pack(side = tk.TOP, padx = 10, pady = 10)
+        # completer erstellen - dieser filtert automatisch die Einträge
+        completer = QCompleter(values, self.matnr_combobox)
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)  # Match anywhere in the string
+        self.matnr_combobox.setCompleter(completer)
 
-        root_name = self.dialogroot.winfo_pathname(self.dialogroot.winfo_id())
-        dialog_name = dialog.winfo_pathname(dialog.winfo_id())
+        mat_layout.addWidget(self.mat_label)
+        mat_layout.addWidget(self.matnr_combobox)
 
-        # These two lines show a modal dialog
-        self.dialogroot.tk.eval('tk::PlaceWindow {0} widget {1}'.format(dialog_name, root_name))
-        entry.focus_set()
-        self.dialogroot.mainloop()
+        # Menge (quantity) entry
+        menge_frame = QFrame()
+        menge_layout = QVBoxLayout(menge_frame)
+        self.stck_label = QLabel('Menge')
+        self.stck_label.setStyleSheet(GREEN_LABEL_SS)
+        self.stck_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        return self.strDialogResult
+        self.stck_entry = QLineEdit()
+        self.stck_entry.setStyleSheet(GREEN_ENTRY_SS)
 
-    def DialogResult(self, result, dialog):
+        menge_layout.addWidget(self.stck_label)
+        menge_layout.addWidget(self.stck_entry)
+
+        content_layout.addWidget(mat_frame)
+        content_layout.addWidget(menge_frame)
+        layout.addLayout(content_layout)
+
+        self.ok_button = QPushButton('buchen')
+        self.ok_button.setStyleSheet(BLUE_BTN)
+        self.ok_button.clicked.connect(lambda: fc.confirm_user_input(self))
+        self.stck_entry.returnPressed.connect(lambda: fc.confirm_user_input(self))
+        layout.addWidget(self.ok_button)
+
+        # Store dialog reference so fc helpers can close it
+        self.ingoing_window = dialog
+        self.matnr_combobox.setFocus()
+
+        # Helper vars expected by fc module
+        self.ingoing_mat_string_var = self.matnr_combobox
+        self.ingoing_menge_var      = self.stck_entry
+
+        dialog.exec()
+
+    # ── InputBox / DialogResult ──────────────────────────────────────
+    def InputBox(self, mat_number: str, mat_name: str) -> str:
+        dlg = InputBoxDialog(self, mat_number, mat_name)
+        dlg.exec()
+        return dlg.result_text
+
+    def DialogResult(self, result: str, dialog: QDialog) -> None:
+        """Compatibility shim - kept in case fc module calls it directly."""
         self.strDialogResult = result
-        #This line quits from the MODAL STATE but doesn't close or destroy the modal dialog
-        self.dialogroot.quit()
-        dialog.destroy()
-
-    
-
-class AutocompleteCombobox(tk.ttk.Combobox):
-        '''
-        stolen from 
-        sloth (https://stackoverflow.com/users/142637/sloth)
-        at 
-        https://stackoverflow.com/questions/12298159/tkinter-how-to-create-a-combo-box-with-autocompletion
-
-        thx for this :)
-
-        creates a combobox with autocompletition
-        '''
-        def set_completion_list(self, completion_list):
-                """Use our completion list as our drop down selection menu, arrows move through menu."""
-                self._completion_list = sorted(completion_list, key=str.lower) # Work with a sorted list
-                self._hits = []
-                self._hit_index = 0
-                self.position = 0
-                self.bind('<KeyRelease>', self.handle_keyrelease)
-                self['values'] = self._completion_list  # Setup our popup menu
-
-        def autocomplete(self, delta=0):
-                """autocomplete the Combobox, delta may be 0/1/-1 to cycle through possible hits"""
-                if delta: # need to delete selection otherwise we would fix the current position
-                        self.delete(self.position, tk.END)
-                else: # set position to end so selection starts where textentry ended
-                        self.position = len(self.get())
-                # collect hits
-                _hits = []
-                for element in self._completion_list:
-                        if element.lower().startswith(self.get().lower()): # Match case insensitively
-                                _hits.append(element)
-                # if we have a new hit list, keep this in mind
-                if _hits != self._hits:
-                        self._hit_index = 0
-                        self._hits=_hits
-                # only allow cycling if we are in a known hit list
-                if _hits == self._hits and self._hits:
-                        self._hit_index = (self._hit_index + delta) % len(self._hits)
-                # now finally perform the auto completion
-                if self._hits:
-                        self.delete(0,tk.END)
-                        self.insert(0,self._hits[self._hit_index])
-                        self.select_range(self.position,tk.END)
-
-        def handle_keyrelease(self, event):
-                """event handler for the keyrelease event on this widget"""
-                if event.keysym == "BackSpace":
-                        self.delete(self.index(tk.INSERT), tk.END)
-                        self.position = self.index(tk.END)
-                if event.keysym == "Left":
-                        if self.position < self.index(tk.END): # delete the selection
-                                self.delete(self.position, tk.END)
-                        else:
-                                self.position = self.position-1 # delete one character
-                                self.delete(self.position, tk.END)
-                if event.keysym == "Right":
-                        self.position = self.index(tk.END) # go to end (no selection)
-                if len(event.keysym) == 1:
-                        self.autocomplete()
-                # No need for up/down, we'll jump to the popup
-                # list at the position of the autocompletion
-
-
+        dialog.accept()
