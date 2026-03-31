@@ -295,6 +295,8 @@ class App(QMainWindow):
                 ('SELECT * FROM Veraltetes_Material WHERE MatNr LIKE ?', r'%matnr%,'),
             'Jahresinventur_Korrekturdaten':
                 ('SELECT * FROM Jahresinventur_Korrekturdaten WHERE MatNr LIKE ?', r'%matnr%,'),
+            'Bundles':
+                ('SELECT * FROM Bundles WHERE MatNr LIKE ?', r'%matnr%,'),
         }
 
         self.filter_dict = {
@@ -316,6 +318,8 @@ class App(QMainWindow):
                 ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
             'Jahresinventur_Korrekturdaten':
                 ([self.matnr_entry], [self.sm_entry, self.posnr_entry]),
+            'Bundles':
+                ([self.matnr_entry], [self.sm_entry, self.posnr_entry])
         }
 
         self.deletion_dict = {
@@ -584,13 +588,13 @@ class App(QMainWindow):
         self.delete_button.clicked.connect(lambda: fc.delete_selected_entries(self))
 
         if self.user in (ADMIN, EXPERT):
-            btn_layout.addWidget(self.bestellt_label, alignment = Qt.AlignmentFlag.AlignLeft)
-            btn_layout.addWidget(self.bestellt_button, alignment = Qt.AlignmentFlag.AlignHCenter)
+            btn_layout.addWidget(self.bestellt_label)
+            btn_layout.addWidget(self.bestellt_button, stretch = 1)
 
-        btn_layout.addWidget(self.print_button, stretch = 1, alignment = Qt.AlignmentFlag.AlignHCenter)
+        btn_layout.addWidget(self.print_button, stretch = 1)
 
         if self.user == ADMIN:
-            btn_layout.addWidget(self.delete_button)
+            btn_layout.addWidget(self.delete_button, stretch = 1)
 
         btn_layout.addStretch()
         outer_layout.addWidget(self.entry_frame)

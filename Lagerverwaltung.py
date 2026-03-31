@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import QApplication
 # ADMIN = database read / write / delete
 
 user = application.EXPERT
-# user = application.ADMIN
+user = application.ADMIN
 
 if __name__ == '__main__':
     # QApplication muss vor allen Widgets erstellt werden

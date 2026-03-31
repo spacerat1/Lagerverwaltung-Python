@@ -19,14 +19,16 @@ import application
 
 # ── Hilfsfunktion: Widget aktivieren / deaktivieren ─────────────────
 def set_widget_status(enabled: list, disabled: list, show:list = None, hide:list = None) -> None:
-    for widget in enabled:
-        if widget is not None:
-            widget.setEnabled(True)
+    
     for widget in disabled:
         if widget is not None:
             if isinstance(widget, QLineEdit):
                 widget.clear()
             widget.setEnabled(False)
+
+    for widget in enabled:
+        if widget is not None:
+            widget.setEnabled(True)    
     
     if show:
         for widget in show:
@@ -215,6 +217,8 @@ def _insert_child(parent: QTreeWidgetItem, values: tuple | list,
 
 # ── Kritisches Material anzeigen ─────────────────────────────────────
 def show_critical_material(app: application.App) -> None:
+    
+    unbind_all_widgets(app)
     app.disabled_button.setEnabled(True)
     app.disabled_button = app.button_krit_mat
     app.button_krit_mat.setEnabled(False)
@@ -225,7 +229,7 @@ def show_critical_material(app: application.App) -> None:
     hide     = [app.delete_button, app.print_button, app.combobox_loeschen]
     
     set_widget_status(enabled, disabled, show, hide)
-    unbind_all_widgets(app)
+    
 
     cursor = app.cursor
     ingoing_dict           = defaultdict(int)
@@ -330,31 +334,37 @@ def toggle_ordered_status(app: application.App) -> None:
 
 
 # ── Bundle-Hilfsfunktionen ───────────────────────────────────────────
-def get_bundles_amount(matnr: int, app) -> int:
-    cursor       = app.cursor
-    ingoing_dict  = defaultdict(int)
-    outgoing_dict = defaultdict(int)
+#
+# deprecated - will be removed in future release
+#
+# def get_bundles_amount(matnr: int, app) -> int:
+#     cursor       = app.cursor
+#     ingoing_dict  = defaultdict(int)
+#     outgoing_dict = defaultdict(int)
+#     ingoing = cursor.execute("SELECT * FROM Wareneingang WHERE MatNr = ?", (matnr,)).fetchall()
+#     outgoing = cursor.execute("SELECT * FROM Warenausgang WHERE MatNr = ?", (matnr,)).fetchall()
+#     small_material = cursor.execute("SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_BEZUG").fetchall()
+#     for row in ingoing:
+#         ingoing_dict[row['MatNr']] += row['Menge']
+#     for row in outgoing:
+#         menge = row['Warenausgangsmenge'] if row['Warenausgangsmenge'] != 0 else row['Bedarfsmenge']
+#         if row['PosTyp'] == 8:
+#             outgoing_dict[row['MatNr']] -= menge
+#         elif row['PosTyp'] == 9:
+#             outgoing_dict[row['MatNr']] += menge
+#     for row in small_material:
+#         outgoing_dict[row['MatNr']] += row['Menge']
 
-    for row in cursor.execute("SELECT * FROM Wareneingang WHERE MatNr = ?", (matnr,)).fetchall():
-        ingoing_dict[row['MatNr']] += row['Menge']
-    for row in cursor.execute("SELECT * FROM Warenausgang WHERE MatNr = ?", (matnr,)).fetchall():
-        menge = row['Warenausgangsmenge'] if row['Warenausgangsmenge'] != 0 else row['Bedarfsmenge']
-        if row['PosTyp'] == 8:
-            outgoing_dict[row['MatNr']] -= menge
-        elif row['PosTyp'] == 9:
-            outgoing_dict[row['MatNr']] += menge
-    for row in cursor.execute("SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_BEZUG").fetchall():
-        outgoing_dict[row['MatNr']] += row['Menge']
-
-    bestand = 0
-    for m, menge in ingoing_dict.items():
-        bestand = menge - outgoing_dict.get(m, 0) + app.correction_dict.get(m, 0)
-    return bestand
+#     bestand = 0
+#     for matnr, menge in ingoing_dict.items():
+#         bestand = menge - outgoing_dict.get(matnr, 0) + app.correction_dict.get(matnr, 0)
+#     return bestand
 
 
 
 # ── Bestand anzeigen ─────────────────────────────────────────────────
 def show_stock(app: application.App) -> None:
+    unbind_all_widgets(app)
     app.disabled_button.setEnabled(True)
     app.disabled_button = app.button_bestand
     app.button_bestand.setEnabled(False)
@@ -366,7 +376,7 @@ def show_stock(app: application.App) -> None:
                 app.combobox_loeschen]
 
     set_widget_status(enabled, disabled, hide = hide)
-    unbind_all_widgets(app)
+    
 
     app.matnr_entry.returnPressed.connect(lambda: show_stock(app))
     app.matnr_entry.textChanged.connect(lambda: show_stock(app))
@@ -394,9 +404,12 @@ def show_stock(app: application.App) -> None:
             outgoing_dict[row['MatNr']] -= menge
         elif row['PosTyp'] == 9:
             outgoing_dict[row['MatNr']] += menge
+    # bundles aus vorhandenen Daten zusammen bauen
     for row in bundles:
-        menge = get_bundles_amount(row['MatNr'], app)
+        # menge = get_bundles_amount(row['MatNr'], app)
+        menge = ingoing_dict.get(row['MatNr'], 0) - outgoing_dict.get(row['MatNr'], 0) + app.correction_dict.get(row['MatNr'], 0)
         bundles_dict[row['MatNr']] = [row['Bezeichnung'], eval(row['Packungsinhalt']), menge]
+    
     for row in cursor.execute(
             "SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_BEZUG").fetchall():
         outgoing_dict[row['MatNr']] += row['Menge']
@@ -407,7 +420,6 @@ def show_stock(app: application.App) -> None:
     for matnr_key, menge in ingoing_dict.items():
         bezeichnung       = app.materialnames_dict[matnr_key]
         einheit           = app.units_dict[matnr_key]
-        bestand           = menge - outgoing_dict.get(matnr_key, 0) + app.correction_dict.get(matnr_key, 0)
         bemerkung         = ''
         bundle_correction = 0 # Das Material aus Bundles wird den Einzelpositionen hinzugerechnet
         for bundle, data in bundles_dict.items():
@@ -419,6 +431,8 @@ def show_stock(app: application.App) -> None:
                         bemerkung += f'davon {bundle_menge} {einheit} aus Bundle {bundle}'
                     else:
                         bemerkung += f", {bundle_menge} {einheit} aus {bundle}"
+        bestand = menge - outgoing_dict.get(matnr_key, 0) + app.correction_dict.get(matnr_key, 0) + bundle_correction
+        
         if matnr_key in app.standard_materials:
             standardmaterial_list.append((matnr_key, bezeichnung, bestand, einheit, bemerkung))
         elif matnr_key in app.small_materials:
@@ -443,6 +457,8 @@ def show_stock(app: application.App) -> None:
 
 # ── Wareneingang anzeigen ────────────────────────────────────────────
 def show_ingoing_material(app: application.App) -> None:
+    
+    unbind_all_widgets(app)
     app.disabled_button.setEnabled(True)
     app.disabled_button = app.button_wareneingang
     app.button_wareneingang.setEnabled(False)
@@ -454,7 +470,7 @@ def show_ingoing_material(app: application.App) -> None:
                 app.combobox_loeschen]
 
     set_widget_status(enabled, disabled, hide = hide)
-    unbind_all_widgets(app)
+    
     app.matnr_entry.setFocus()
     app.matnr_entry.returnPressed.connect(lambda: show_ingoing_material(app))
     app.matnr_entry.textChanged.connect(lambda: show_ingoing_material(app))
@@ -495,6 +511,7 @@ def show_ingoing_material(app: application.App) -> None:
 
 # ── Warenausgang anzeigen ────────────────────────────────────────────
 def show_outgoing_material(app: application.App) -> None:
+    unbind_all_widgets(app)
     app.disabled_button.setEnabled(True)
     app.disabled_button = app.button_warenausgang
     app.button_warenausgang.setEnabled(False)
@@ -505,7 +522,7 @@ def show_outgoing_material(app: application.App) -> None:
                 app.delete_button, app.print_button, app.combobox_loeschen]
     
     set_widget_status(enabled, disabled, hide = hide)
-    unbind_all_widgets(app)
+    
 
     app.sm_entry.returnPressed.connect(lambda: show_outgoing_material(app))
     app.sm_entry.textChanged.connect(lambda: show_outgoing_material(app))
@@ -569,6 +586,9 @@ def show_outgoing_material(app: application.App) -> None:
 
 # ── Material für SM-Auftrag anzeigen ─────────────────────────────────
 def show_material_for_order(app: application.App) -> None:
+    
+    unbind_all_widgets(app)
+    
     app.disabled_button.setEnabled(True)
     app.disabled_button = app.button_sm_auftrag
     app.button_sm_auftrag.setEnabled(False)
@@ -584,27 +604,27 @@ def show_material_for_order(app: application.App) -> None:
                 app.combobox_loeschen
                 ]
     set_widget_status(enabled, disabled, show = show, hide = hide)
-    unbind_all_widgets(app)
+    
+    
+
     app.sm_entry.returnPressed.connect(lambda: show_material_for_order(app))
     app.sm_entry.textChanged.connect(lambda: show_material_for_order(app))
     app.sm_entry.setFocus()
 
     cursor = app.cursor
     smnr   = app.sm_entry.text()
-
-    bundles      = cursor.execute("SELECT * FROM Bundles").fetchall()
-    bundles_dict = {}
-    for row in bundles:
-        menge = get_bundles_amount(row['MatNr'], app)
-        bundles_dict[row['MatNr']] = [row['Bezeichnung'], eval(row['Packungsinhalt']), menge]
-
     selection          = cursor.execute(
         "SELECT * FROM Warenausgabe_Comline WHERE SM_Nummer LIKE ?",
         (f'%{smnr}%',)).fetchall()
     selection_addresses= cursor.execute(
         "SELECT * FROM Adresszuordnung WHERE SM_Nummer LIKE ?",
         (f'%{smnr}%',)).fetchall()
-
+    bundles      = cursor.execute("SELECT * FROM Bundles").fetchall()
+    bundles_dict = {}
+ # ---------------------- Hier bundles dict erzeugen, nicht jede Position einzeln ermitteln  
+    for row in bundles:
+        bundles_dict[row['MatNr']] = [row['Bezeichnung'], eval(row['Packungsinhalt'])]
+ # --------------------------------------------------------------------------------------------   
     standard_material = []
     small_material    = []
     telekom_material  = []
@@ -641,7 +661,7 @@ def show_material_for_order(app: application.App) -> None:
             amount    = entry[3]
             if bundle_nr in bundles_dict:
                 bundle_item = _insert_child(parent, entry, app, 'bundle_head')
-                bundle_name, contents, bundle_amount = bundles_dict[bundle_nr]
+                bundle_name, contents = bundles_dict[bundle_nr]
                 for matnr in contents:
                     name = app.materialnames_dict[matnr]
                     unit = app.units_dict[matnr]
