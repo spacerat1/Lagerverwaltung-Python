@@ -391,24 +391,38 @@ def show_stock(app: application.App) -> None:
         "SELECT * FROM Warenausgang WHERE MatNr LIKE ?", (f'%{matnr}%',)).fetchall()
     bundles = cursor.execute(
         "SELECT * FROM Bundles").fetchall()
+    bundles_in = cursor.execute(
+        "SELECT * FROM Wareneingang WHERE MatNr in (SELECT MatNr FROM Bundles)").fetchall()
+    bundles_out = cursor.execute(
+        "SELECT * FROM Warenausgang WHERE MatNr in (SELECT MatNr FROM Bundles)").fetchall()
     
     ingoing_dict  = defaultdict(int)
     outgoing_dict = defaultdict(int)
-    bundles_dict = defaultdict(list)
+    bundles_in_dict = defaultdict(int)
+    bundles_out_dict = defaultdict(int)
+    bundles_total_dict = defaultdict(list)
 
     for row in ingoing:
         ingoing_dict[row['MatNr']] += row['Menge']
+    for row in bundles_in:
+        bundles_in_dict[row['MatNr']] += row['Menge']
     for row in outgoing:
         menge = row['Warenausgangsmenge'] if row['Warenausgangsmenge'] != 0 else row['Bedarfsmenge']
         if row['PosTyp'] == 8:
             outgoing_dict[row['MatNr']] -= menge
         elif row['PosTyp'] == 9:
             outgoing_dict[row['MatNr']] += menge
-    # bundles aus vorhandenen Daten zusammen bauen
+    for row in bundles_out:
+        menge = row['Warenausgangsmenge'] if row['Warenausgangsmenge'] != 0 else row['Bedarfsmenge']
+        if row['PosTyp'] == 8:
+            bundles_out_dict[row['MatNr']] -= menge
+        elif row['PosTyp'] == 9:
+            bundles_out_dict[row['MatNr']] += menge        
+
+    
     for row in bundles:
-        # menge = get_bundles_amount(row['MatNr'], app)
-        menge = ingoing_dict.get(row['MatNr'], 0) - outgoing_dict.get(row['MatNr'], 0) + app.correction_dict.get(row['MatNr'], 0)
-        bundles_dict[row['MatNr']] = [row['Bezeichnung'], eval(row['Packungsinhalt']), menge]
+        menge = bundles_in_dict.get(row['MatNr'], 0) - bundles_out_dict.get(row['MatNr'], 0) + app.correction_dict.get(row['MatNr'], 0)
+        bundles_total_dict[row['MatNr']] = [row['Bezeichnung'], eval(row['Packungsinhalt']), menge]
     
     for row in cursor.execute(
             "SELECT * FROM Warenausgang_Kleinstmaterial_ohne_SM_BEZUG").fetchall():
@@ -422,8 +436,8 @@ def show_stock(app: application.App) -> None:
         einheit           = app.units_dict[matnr_key]
         bemerkung         = ''
         bundle_correction = 0 # Das Material aus Bundles wird den Einzelpositionen hinzugerechnet
-        for bundle, data in bundles_dict.items():
-            bundle_bezeichnung, content, bundle_menge = data
+        for bundle, data in bundles_total_dict.items():
+            _, content, bundle_menge = data
             if matnr_key in content:
                 bundle_correction = bundle_menge
                 if bundle_correction:
