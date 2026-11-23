@@ -1,8 +1,10 @@
-import sys
 import sqlite3
-import functions as fc
-import application
+import sys
+
 from PyQt6.QtWidgets import QApplication
+
+import application
+import functions as fc
 
 # set user privileges
 # STANDARD = database read only
@@ -18,8 +20,9 @@ if __name__ == '__main__':
 
     # connect to database
     path_to_db: str = fc.open_db()
-    connection: sqlite3.Connection = sqlite3.connect(path_to_db)
-    connection.row_factory = sqlite3.Row  # set the standard return format
+    if not path_to_db:
+        sys.exit(0)  # Auswahl der Datenbank abgebrochen
+    connection: sqlite3.Connection = fc.connect_db(path_to_db)
     cursor: sqlite3.Cursor = connection.cursor()
 
     # open the frontend (maximiert statt "zoomed")
@@ -29,7 +32,7 @@ if __name__ == '__main__':
     exit_code = qt_app.exec()
 
     # fc.read_adresses_from_workorder_list(connection, cursor)
-    # fc.add_standardmaterial(connection, cursor, (40980058,'E&MMS-ZCH EMK Kassette für 96 S/P BG', 'SA', 2, 10, False))
+    # fc.add_standardmaterial(connection, cursor, (47194953,'Gf-Atk 1x12F SC/APC9 1,5m SC/APC9 4m 45m', 'ST', 0, 1, False))
     # fc.add_kleinstmaterial(connection, cursor,(40205824,'E&MMS-T EMK-Modul 8Rasteinheit 8Spleißk', 'ST', 2, 20, False))
     # fc.add_bundle(connection, cursor, 40935979,'PE E&MMS-T NGN-Spleiß-Patch-Set-96 li 8m', [40821750, 40821754])
     # fc.write_correction_data_from_yearly_inspection(connection, cursor)
